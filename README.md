@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.2.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.3.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -19,7 +19,7 @@ step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
 
 | File | What it is |
 |---|---|
-| `index.html` | The whole app — shell, login, menu grid, Google Maps helper |
+| `index.html` | The whole app — shell, login, left tree menu, Google Maps helper |
 | `server.py` | Local static server on port 8127, caching disabled |
 | `manifest.webmanifest` | PWA manifest so it installs to a phone home screen |
 | `vercel.json` | No build, no cache |
@@ -33,8 +33,13 @@ Asset `8126`, **Team2 `8127`**, prodwatch `8777`.
 
 ## Status — what is built
 
-**Built:** the shell. Login, session, the menu grid, hash routing, and the
-permission matrix deciding which tiles a role sees.
+**Built:** the shell. Login, session, a **left sidebar tree menu** (v0.3.0), hash
+routing, and the permission matrix deciding which menus a role sees.
+
+The tree shows Home, then each group (Daily, Requests, Masters, Reports, Admin) as a
+collapsible branch with a count; the open menu is highlighted and its branch always
+expands. Collapsed branches are remembered per browser. Under 900px wide the tree
+becomes a slide-in drawer (hamburger, scrim, Esc to close) so it works on phones.
 
 **Login page** (v0.2.0) is modelled on the Carloo Tex *Field Force Management*
 login, with the **Gate** tab deliberately removed. Three tabs:

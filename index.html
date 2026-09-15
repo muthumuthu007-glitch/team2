@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.2.0",
+    version: "0.3.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -174,21 +174,15 @@
     .lg-tab { font-size: 13px; gap: 5px; }
   }
 
-  /* ---------- Shell ---------- */
-  .wrap {
-    width: min(560px, 100%); margin: 0 auto;
-    padding: 0 var(--pad) calc(24px + env(safe-area-inset-bottom));
-    display: flex; flex-direction: column; gap: 14px;
-  }
+  /* ---------- App shell: top bar + left tree + content ---------- */
+  #scr-app.active { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
   .topbar {
-    position: sticky; top: 0; z-index: 20;
+    flex: 0 0 auto; z-index: 30;
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    background: rgba(245, 246, 250, 0.92); backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--border);
-    padding: calc(10px + env(safe-area-inset-top)) var(--pad) 10px;
-    margin: 0 calc(-1 * var(--pad)) 2px;
+    background: #fff; border-bottom: 1px solid var(--border);
+    padding: calc(9px + env(safe-area-inset-top)) var(--pad) 9px;
   }
-  .topbar .left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .topbar .left, .topbar .right { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .whoami { font-size: 11.5px; color: var(--muted); line-height: 1.3; text-align: right; }
   .whoami b { display: block; color: var(--ink); font-weight: 600; font-size: 13px; }
   .iconbtn {
@@ -196,35 +190,61 @@
     width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
     cursor: pointer; color: var(--text); flex: 0 0 auto;
   }
-  .iconbtn:active { border-color: var(--brand); color: var(--brand); }
+  .iconbtn:hover, .iconbtn:active { border-color: var(--brand); color: var(--brand); }
+  .only-mobile { display: none !important; }
 
-  /* ---------- Menu ---------- */
-  .group-title {
-    font-size: 10.5px; color: var(--muted); font-weight: 700;
-    letter-spacing: 0.15em; text-transform: uppercase;
-    padding: 8px 2px 0; user-select: none;
-  }
-  .menu-grid { display: grid; gap: 11px; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }
-  .tile {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
-    padding: 14px 13px; box-shadow: var(--shadow);
-    display: flex; flex-direction: column; gap: 9px; align-items: flex-start;
-    text-align: left; cursor: pointer; font: inherit; color: inherit;
-    transition: border-color .12s, transform .12s;
-  }
-  .tile:active { border-color: var(--brand); transform: scale(0.985); }
-  .tile:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-  .tile .ic {
-    width: 36px; height: 36px; border-radius: 11px;
-    background: var(--brand-soft); color: var(--brand);
-    display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  }
-  .tile .t-label { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
-  .tile .t-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .shell { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
 
-  /* ---------- Module ---------- */
-  .mod-title { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.15; }
-  .mod-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  /* ---------- Left tree ---------- */
+  .sidebar {
+    flex: 0 0 264px; width: 264px; background: #fff; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .side-head {
+    align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  .tree { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 12px 10px 16px; }
+  .side-foot {
+    flex: 0 0 auto; border-top: 1px solid var(--border);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase;
+  }
+  .tree button {
+    display: flex; align-items: center; width: 100%;
+    border: 0; background: transparent; font: inherit; color: var(--text);
+    text-align: left; border-radius: 9px; cursor: pointer;
+  }
+  .tree button:hover { background: #f4f6fb; }
+  .tree button:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .tree .ic { display: flex; flex: 0 0 auto; color: var(--muted); }
+  .tree .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree-home { gap: 10px; padding: 9px 10px; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .tree-parent {
+    gap: 8px; padding: 9px 10px; margin-top: 2px;
+    font-size: 11px !important; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--muted) !important;
+  }
+  .tree-parent .chev { display: flex; transition: transform 0.15s; }
+  .tree-parent[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+  .tree-parent .count {
+    margin-left: auto; padding: 1px 7px; border-radius: 999px;
+    background: #f0f2f7; font-size: 10px; font-weight: 600; letter-spacing: 0;
+  }
+  .tree-children { margin: 1px 0 6px 16px; padding-left: 9px; border-left: 1px solid var(--border); }
+  .tree-children[hidden] { display: none; }
+  .tree-item { gap: 10px; padding: 8px 10px; font-size: 13.5px; }
+  .tree [aria-current="page"] { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+  .tree [aria-current="page"] .ic { color: var(--brand); }
+  .tree [aria-current="page"]:hover { background: var(--brand-soft); }
+
+  /* ---------- Content ---------- */
+  .content { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 22px 28px calc(28px + env(safe-area-inset-bottom)); }
+  .content-inner { max-width: 920px; }
+  .crumb { font-size: 10.5px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+  .mod-title { font-family: var(--serif); font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1.2; margin-top: 4px; }
+  .mod-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  #modBody { margin-top: 18px; }
   .placeholder {
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     padding: 44px 20px; text-align: center;
@@ -236,10 +256,29 @@
   }
   .placeholder h3 { font-size: 15px; font-weight: 600; color: var(--ink); }
   .placeholder p { font-size: 13px; color: var(--muted); max-width: 340px; line-height: 1.55; }
+  button.go.compact { width: auto; padding: 11px 20px; margin-top: 6px; font-size: 14px; }
 
-  .foot {
-    text-align: center; font-size: 10px; font-weight: 700; color: var(--muted);
-    letter-spacing: 0.15em; text-transform: uppercase; padding: 6px 0 2px;
+  .scrim { display: none; }
+
+  /* ---------- Phones and small tablets: the tree becomes a slide-in drawer ---------- */
+  @media (max-width: 899px) {
+    .only-mobile { display: flex !important; }
+    .sidebar {
+      position: fixed; z-index: 40; top: 0; bottom: 0; left: 0;
+      width: min(292px, 84vw); padding-top: env(safe-area-inset-top);
+      box-shadow: 0 0 40px rgba(27, 32, 51, 0.18);
+      transform: translateX(-100%); visibility: hidden;
+      transition: transform 0.2s ease, visibility 0s linear 0.2s;
+    }
+    .shell.drawer-open .sidebar { transform: none; visibility: visible; transition: transform 0.2s ease; }
+    .scrim {
+      display: block; position: fixed; inset: 0; z-index: 35;
+      background: rgba(27, 32, 51, 0.35); opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .shell.drawer-open .scrim { opacity: 1; pointer-events: auto; }
+    .content { padding: 16px var(--pad) calc(24px + env(safe-area-inset-bottom)); }
+    .mod-title { font-size: 21px; }
+    .tree-item { padding: 10px 10px; font-size: 14.5px; }   /* bigger touch targets */
   }
 </style>
 </head>
@@ -294,55 +333,56 @@
   <p class="lg-foot">&copy; <span id="lgYear">2026</span> Carloo Tex. All rights reserved.</p>
 </section>
 
-<!-- ============ Home ============ -->
-<section class="screen" id="scr-home">
-  <div class="wrap">
-    <div class="topbar">
-      <div class="left">
+<!-- ============ App: top bar + left tree menu + content ============ -->
+<section class="screen" id="scr-app">
+  <header class="topbar">
+    <div class="left">
+      <button class="iconbtn only-mobile" id="btnDrawer" type="button"
+              aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="brand small">
+        <div class="logo">T</div>
+        <div class="word">Team2</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="whoami"><b id="whoName">—</b><span id="whoRole"></span></div>
+      <button class="iconbtn" id="btnOut" type="button" title="Sign out" aria-label="Sign out">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 4.5h3.6A1.4 1.4 0 0 1 19.5 6v12a1.4 1.4 0 0 1-1.4 1.4h-3.6M10 16l-4-4 4-4M6 12h9"/>
+          </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="shell" id="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Main menu">
+      <div class="side-head only-mobile">
         <div class="brand small">
           <div class="logo">T</div>
           <div class="word">Team2</div>
         </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div class="whoami"><b id="whoName">—</b><span id="whoRole"></span></div>
-        <button class="iconbtn" id="btnOut" title="Sign out" aria-label="Sign out">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14.5 4.5h3.6A1.4 1.4 0 0 1 19.5 6v12a1.4 1.4 0 0 1-1.4 1.4h-3.6M10 16l-4-4 4-4M6 12h9"/>
-          </svg>
+        <button class="iconbtn" id="btnDrawerClose" type="button" aria-label="Close menu">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
         </button>
       </div>
-    </div>
-    <div id="menuHost"></div>
-    <div class="foot" id="homeFoot"></div>
-  </div>
-</section>
+      <nav class="tree" id="treeHost"></nav>
+      <div class="side-foot" id="sideFoot"></div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
 
-<!-- ============ Module ============ -->
-<section class="screen" id="scr-mod">
-  <div class="wrap">
-    <div class="topbar">
-      <div class="left">
-        <button class="iconbtn" id="btnBack" title="Back" aria-label="Back to menu">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14.5 5.5 8 12l6.5 6.5"/>
-          </svg>
-        </button>
-        <div style="min-width:0">
-          <div class="mod-title" id="modTitle">—</div>
-          <div class="mod-sub" id="modSub"></div>
-        </div>
+    <main class="content" id="content">
+      <div class="content-inner">
+        <div class="crumb" id="modCrumb"></div>
+        <h1 class="mod-title" id="modTitle"></h1>
+        <p class="mod-sub" id="modSub"></p>
+        <div id="modBody"></div>
       </div>
-      <button class="iconbtn" id="btnHome" title="Menu" aria-label="Menu">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4.5 4.5h5.5v5.5H4.5zM14 4.5h5.5v5.5H14zM4.5 14h5.5v5.5H4.5zM14 14h5.5v5.5H14z"/>
-        </svg>
-      </button>
-    </div>
-    <div id="modBody"></div>
+    </main>
   </div>
 </section>
 
@@ -365,6 +405,7 @@
 
   // ---------- Icons (24x24, stroked) ----------
   var ICONS = {
+    home:     "M4.5 10.6 12 4.4l7.5 6.2V19a1 1 0 0 1-1 1h-4.3v-5.4H9.8V20H5.5a1 1 0 0 1-1-1z",
     clock:    "M12 20.4a8.4 8.4 0 1 0 0-16.8 8.4 8.4 0 0 0 0 16.8zM12 7.4V12l3 1.8",
     calendar: "M5 6.4h14v13H5zM5 10.2h14M8.6 4.4v3M15.4 4.4v3M8.6 13.4h1.4M15 13.4h.02M8.6 16.4h1.4M15 16.4h.02",
     pin:      "M12 20.5s6.2-5.4 6.2-9.6a6.2 6.2 0 1 0-12.4 0c0 4.2 6.2 9.6 6.2 9.6zM12 13a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z",
@@ -439,7 +480,7 @@
 
   // ---------- Screens ----------
   function show(id) {
-    ["scr-login", "scr-home", "scr-mod"].forEach(function (s) {
+    ["scr-login", "scr-app"].forEach(function (s) {
       $(s).classList.toggle("active", s === id);
     });
     window.scrollTo(0, 0);
@@ -476,50 +517,130 @@
     return a !== "none";
   }
 
-  function renderMenu() {
-    var host = $("menuHost");
-    host.innerHTML = "";
-    var mine = MENUS.filter(menuVisible);
+  // ---------- Left tree menu ----------
+  // Groups are branches, menus are leaves. Which branches are collapsed is
+  // remembered per browser; opening a menu always expands its branch.
+  var currentId = null;   // null = Home
+  var treeCollapsed = {};
+  try { treeCollapsed = JSON.parse(localStorage.getItem("team2.treeCollapsed") || "{}") || {}; }
+  catch (e) { treeCollapsed = {}; }
 
-    GROUP_ORDER.forEach(function (g) {
-      var inGroup = mine.filter(function (m) { return m.group === g; });
-      if (!inGroup.length) return;
+  var CHEVRON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+                'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 
-      var title = document.createElement("div");
-      title.className = "group-title";
-      title.textContent = g;
-      host.appendChild(title);
-
-      var grid = document.createElement("div");
-      grid.className = "menu-grid";
-      inGroup.forEach(function (m) {
-        var b = document.createElement("button");
-        b.className = "tile";
-        b.type = "button";
-        b.innerHTML =
-          '<span class="ic">' + svg(m.icon) + '</span>' +
-          '<span class="t-label">' + m.label + '</span>' +
-          '<span class="t-desc">' + m.desc + '</span>';
-        b.addEventListener("click", function () { openModule(m.id); });
-        grid.appendChild(b);
-      });
-      host.appendChild(grid);
-    });
-
-    $("homeFoot").textContent = "Team2 " + CFG.version;
+  // Menu labels carry HTML entities (&amp;); a title attribute needs plain text.
+  function plain(html) {
+    var t = document.createElement("textarea");
+    t.innerHTML = html;
+    return t.value;
   }
 
+  function groupKey(g) { return "tg-" + g.toLowerCase(); }
+
+  function renderTree() {
+    var host = $("treeHost");
+    host.innerHTML = "";
+
+    var home = document.createElement("button");
+    home.type = "button";
+    home.className = "tree-home";
+    home.dataset.id = "";
+    home.innerHTML = '<span class="ic">' + svg("home", 18) + '</span><span class="lbl">Home</span>';
+    home.addEventListener("click", goHome);
+    host.appendChild(home);
+
+    var mine = MENUS.filter(menuVisible);
+    GROUP_ORDER.forEach(function (g) {
+      var items = mine.filter(function (m) { return m.group === g; });
+      if (!items.length) return;
+      var open = !treeCollapsed[g];
+
+      var wrap = document.createElement("div");
+      wrap.className = "tree-group";
+
+      var parent = document.createElement("button");
+      parent.type = "button";
+      parent.className = "tree-parent";
+      parent.setAttribute("aria-expanded", open ? "true" : "false");
+      parent.setAttribute("aria-controls", groupKey(g));
+      parent.innerHTML = '<span class="chev">' + CHEVRON + '</span><span class="lbl">' + g + '</span>' +
+                         '<span class="count">' + items.length + '</span>';
+
+      var list = document.createElement("div");
+      list.className = "tree-children";
+      list.id = groupKey(g);
+      list.hidden = !open;
+      parent.addEventListener("click", function () { setGroupOpen(g, list.hidden); });
+
+      items.forEach(function (m) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "tree-item";
+        b.dataset.id = m.id;
+        b.title = plain(m.desc);
+        b.innerHTML = '<span class="ic">' + svg(m.icon, 17) + '</span><span class="lbl">' + m.label + '</span>';
+        b.addEventListener("click", function () { openModule(m.id); });
+        list.appendChild(b);
+      });
+
+      wrap.appendChild(parent);
+      wrap.appendChild(list);
+      host.appendChild(wrap);
+    });
+
+    $("sideFoot").textContent = "Team2 " + CFG.version;
+    markActive();
+  }
+
+  function setGroupOpen(g, open) {
+    var list = $(groupKey(g));
+    if (!list) return;
+    list.hidden = !open;
+    list.previousElementSibling.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) delete treeCollapsed[g]; else treeCollapsed[g] = true;
+    try { localStorage.setItem("team2.treeCollapsed", JSON.stringify(treeCollapsed)); } catch (e) { /* ignore */ }
+  }
+
+  function markActive() {
+    document.querySelectorAll("#treeHost [data-id]").forEach(function (b) {
+      if ((b.dataset.id || null) === currentId) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+  }
+
+  // ---------- Drawer (phones only; on desktop the tree is always visible) ----------
+  function openDrawer() {
+    $("shell").classList.add("drawer-open");
+    $("btnDrawer").setAttribute("aria-expanded", "true");
+    var target = document.querySelector('#treeHost [aria-current="page"]') ||
+                 document.querySelector("#treeHost button");
+    if (target) target.focus();
+  }
+
+  function closeDrawer() {
+    if (!$("shell").classList.contains("drawer-open")) return;
+    $("shell").classList.remove("drawer-open");
+    $("btnDrawer").setAttribute("aria-expanded", "false");
+  }
+
+  // ---------- Content area ----------
   function openModule(id) {
     var m = MENU_BY_ID[id];
     if (!m) return;
     if (!menuVisible(m)) { goHome(); return; }
+    currentId = id;
+    setGroupOpen(m.group, true);
+    $("modCrumb").textContent = m.group;
     $("modTitle").innerHTML = m.label;
     $("modSub").innerHTML = m.desc;
     var host = $("modBody");
     host.innerHTML = m.render ? "" : placeholderHTML(m);
     if (m.render) m.render(host);
-    location.hash = "#" + id;
-    show("scr-mod");
+    if (location.hash !== "#" + id) location.hash = "#" + id;
+    markActive();
+    closeDrawer();
+    show("scr-app");
+    $("content").scrollTop = 0;
   }
 
   function placeholderHTML(m) {
@@ -532,8 +653,27 @@
   }
 
   function goHome() {
-    if (location.hash) location.hash = "";
-    show("scr-home");
+    currentId = null;
+    var mine = MENUS.filter(menuVisible);
+    var groups = GROUP_ORDER.filter(function (g) {
+      return mine.some(function (m) { return m.group === g; });
+    });
+    $("modCrumb").textContent = "Home";
+    $("modTitle").textContent = "Welcome, " + (me.name || me.username);
+    $("modSub").textContent = me.role + " \u00b7 Team2 " + CFG.version;
+    $("modBody").innerHTML = '<div class="panel"><div class="placeholder">' +
+      '<div class="ic">' + svg("grid", 24) + '</div>' +
+      '<h3>Choose a menu</h3>' +
+      '<p>' + mine.length + ' menus in ' + groups.length + ' groups — ' + esc(groups.join(", ")) + '.</p>' +
+      '<button class="go compact only-mobile" type="button" id="homeOpenMenu">Open menu</button>' +
+      '</div></div>';
+    $("homeOpenMenu").addEventListener("click", openDrawer);
+    // Drop the hash without adding a history entry (keeps any ?query, e.g. a share link).
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    markActive();
+    closeDrawer();
+    show("scr-app");
+    $("content").scrollTop = 0;
   }
 
   // ---------- Google Maps ----------
@@ -658,16 +798,17 @@
     setMsg($("loginMsg"), "");
     $("whoName").textContent = me.name || me.username;
     $("whoRole").textContent = me.role;
-    renderMenu();
+    renderTree();
 
     var want = (location.hash || "").replace("#", "");
-    if (want && MENU_BY_ID[want]) openModule(want); else show("scr-home");
+    if (want && MENU_BY_ID[want]) openModule(want); else goHome();
     return true;
   }
 
   function signOut() {
     sb.auth.signOut();
-    me = null; myAccess = {};
+    closeDrawer();
+    me = null; myAccess = {}; currentId = null;
     $("f-u").value = ""; $("f-p").value = "";
     setMsg($("loginMsg"), "");
     location.hash = "";
@@ -750,13 +891,17 @@
   });
 
   $("btnOut").addEventListener("click", signOut);
-  $("btnBack").addEventListener("click", goHome);
-  $("btnHome").addEventListener("click", goHome);
+  $("btnDrawer").addEventListener("click", openDrawer);
+  $("btnDrawerClose").addEventListener("click", closeDrawer);
+  $("scrim").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeDrawer();
+  });
 
   window.addEventListener("hashchange", function () {
     if (!me) return;
     var want = (location.hash || "").replace("#", "");
-    if (want && MENU_BY_ID[want]) openModule(want); else show("scr-home");
+    if (want && MENU_BY_ID[want]) openModule(want); else goHome();
   });
 
   startSession();
