@@ -1,0 +1,10 @@
+{
+  "name": "Team2",
+  "short_name": "Team2",
+  "description": "Attendance, leave, permission and field visits",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6fa",
+  "theme_color": "#2f4bd0"
+}

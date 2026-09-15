@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2f4bd0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Team2</title>
+<link rel="manifest" href="manifest.webmanifest">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+<script>
+  // Team2 — attendance, leave, permission and field visits.
+  // Production host: https://team2.carloo.in (not attached yet).
+  // Data lives in the `team2` schema of the carloo-order-management project.
+  window.APP_CFG = {
+    version: "0.1.0",
+    url: "https://thmszlxepqkrcqavlilq.supabase.co",
+    key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
+
+    // Google Maps browser key. Leave "" and every map feature stays off — the app
+    // still records raw lat/lng. Enable on the key: Maps JavaScript API,
+    // Geocoding API, Places API, Distance Matrix API. Restrict it by HTTP referrer
+    // to team2.carloo.in and http://127.0.0.1:8127.
+    gmapsKey: ""
+  };
+</script>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --panel: #ffffff;
+    --brand: #2f4bd0;
+    --brand-deep: #2439a6;
+    --brand-soft: #e9ecfb;
+    --ink: #1b2033;
+    --text: #2c3244;
+    --muted: #878da0;
+    --border: #e4e6ef;
+    --error: #b3382c;
+    --ok: #1c7a4b;
+    --warn: #a76a12;
+    --shadow: 0 1px 2px rgba(27, 32, 51, 0.06), 0 8px 24px rgba(27, 32, 51, 0.07);
+    --serif: Georgia, "Times New Roman", "Noto Serif", serif;
+    --pad: max(14px, env(safe-area-inset-left));
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+  }
+  .screen { display: none; min-height: 100%; }
+  .screen.active { display: block; }
+
+  /* ---------- Brand ---------- */
+  .brand { display: flex; align-items: center; gap: 11px; user-select: none; }
+  .brand .logo {
+    width: 42px; height: 42px; border-radius: 13px;
+    background: var(--brand); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-size: 22px; font-weight: 700; flex: 0 0 auto;
+  }
+  .brand .word {
+    font-family: var(--serif); font-size: 25px; font-weight: 700;
+    color: var(--ink); letter-spacing: 0.01em; line-height: 1.1;
+  }
+  .brand .sub {
+    display: block; font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 9.5px; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.15em; text-transform: uppercase; margin-top: 3px;
+  }
+  .brand.small .logo { width: 34px; height: 34px; border-radius: 10px; font-size: 18px; }
+  .brand.small .word { font-size: 19px; }
+
+  /* ---------- Shared ---------- */
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 16px; padding: 20px; box-shadow: var(--shadow);
+  }
+  .field { display: flex; flex-direction: column; gap: 7px; }
+  .field label, .sec-title {
+    font-size: 11px; color: var(--muted);
+    letter-spacing: 0.13em; text-transform: uppercase;
+    font-weight: 600; user-select: none;
+  }
+  input.txt, select.txt, textarea.txt {
+    background: #fbfcfe; border: 1px solid var(--border); border-radius: 11px;
+    color: var(--text); font: inherit; font-size: 16px;   /* 16px stops iOS zoom-on-focus */
+    padding: 12px 13px; outline: none; caret-color: var(--brand); width: 100%;
+  }
+  input.txt:focus, select.txt:focus, textarea.txt:focus { border-color: var(--brand); background: #fff; }
+  button.go {
+    background: var(--brand); color: #fff; border: none; border-radius: 11px;
+    font: inherit; font-weight: 600; font-size: 16px;
+    padding: 14px 0; cursor: pointer; width: 100%;
+  }
+  button.go:active { background: var(--brand-deep); transform: translateY(1px); }
+  button.go[disabled] { opacity: 0.55; }
+  .msg { min-height: 18px; font-size: 13px; text-align: center; user-select: none; }
+  .msg.err { color: var(--error); }
+  .msg.ok  { color: var(--ok); }
+
+  /* ---------- Login ---------- */
+  #scr-login { display: none; }
+  #scr-login.active { display: flex; align-items: center; justify-content: center; padding: 26px var(--pad); }
+  .login-wrap { width: min(380px, 100%); display: flex; flex-direction: column; gap: 26px; }
+  .login-wrap .brand { justify-content: center; }
+  form.login { display: flex; flex-direction: column; gap: 15px; }
+  .login-ver {
+    margin-top: -12px; text-align: center;
+    font-size: 10px; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.15em; text-transform: uppercase;
+  }
+
+  /* ---------- Shell ---------- */
+  .wrap {
+    width: min(560px, 100%); margin: 0 auto;
+    padding: 0 var(--pad) calc(24px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: rgba(245, 246, 250, 0.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: calc(10px + env(safe-area-inset-top)) var(--pad) 10px;
+    margin: 0 calc(-1 * var(--pad)) 2px;
+  }
+  .topbar .left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .whoami { font-size: 11.5px; color: var(--muted); line-height: 1.3; text-align: right; }
+  .whoami b { display: block; color: var(--ink); font-weight: 600; font-size: 13px; }
+  .iconbtn {
+    background: #fff; border: 1px solid var(--border); border-radius: 11px;
+    width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text); flex: 0 0 auto;
+  }
+  .iconbtn:active { border-color: var(--brand); color: var(--brand); }
+
+  /* ---------- Menu ---------- */
+  .group-title {
+    font-size: 10.5px; color: var(--muted); font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    padding: 8px 2px 0; user-select: none;
+  }
+  .menu-grid { display: grid; gap: 11px; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }
+  .tile {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 14px 13px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 9px; align-items: flex-start;
+    text-align: left; cursor: pointer; font: inherit; color: inherit;
+    transition: border-color .12s, transform .12s;
+  }
+  .tile:active { border-color: var(--brand); transform: scale(0.985); }
+  .tile:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .tile .ic {
+    width: 36px; height: 36px; border-radius: 11px;
+    background: var(--brand-soft); color: var(--brand);
+    display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  }
+  .tile .t-label { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+  .tile .t-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+  /* ---------- Module ---------- */
+  .mod-title { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.15; }
+  .mod-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 44px 20px; text-align: center;
+  }
+  .placeholder .ic {
+    width: 48px; height: 48px; border-radius: 14px;
+    background: var(--brand-soft); color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .placeholder h3 { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .placeholder p { font-size: 13px; color: var(--muted); max-width: 340px; line-height: 1.55; }
+
+  .foot {
+    text-align: center; font-size: 10px; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.15em; text-transform: uppercase; padding: 6px 0 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ Login ============ -->
+<section class="screen active" id="scr-login">
+  <div class="login-wrap">
+    <div class="brand">
+      <div class="logo">T</div>
+      <div>
+        <div class="word">Team2</div>
+        <span class="sub">Attendance &amp; Field Visits</span>
+      </div>
+    </div>
+    <form class="panel login" id="loginForm" autocomplete="off">
+      <div class="field">
+        <label for="f-u">Mobile number</label>
+        <input class="txt" id="f-u" name="pl-k41c" type="tel" inputmode="numeric"
+               autocapitalize="none" autocomplete="off" spellcheck="false" readonly
+               onfocus="this.removeAttribute('readonly')">
+      </div>
+      <div class="field">
+        <label for="f-p">Password</label>
+        <input class="txt" id="f-p" name="pl-q78x" type="password"
+               autocomplete="new-password" readonly
+               onfocus="this.removeAttribute('readonly')">
+      </div>
+      <button class="go" type="submit" id="loginBtn">Sign in</button>
+      <div class="msg" id="loginMsg"></div>
+    </form>
+    <div class="login-ver" id="loginVer"></div>
+  </div>
+</section>
+
+<!-- ============ Home ============ -->
+<section class="screen" id="scr-home">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="left">
+        <div class="brand small">
+          <div class="logo">T</div>
+          <div class="word">Team2</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="whoami"><b id="whoName">—</b><span id="whoRole"></span></div>
+        <button class="iconbtn" id="btnOut" title="Sign out" aria-label="Sign out">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 4.5h3.6A1.4 1.4 0 0 1 19.5 6v12a1.4 1.4 0 0 1-1.4 1.4h-3.6M10 16l-4-4 4-4M6 12h9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="menuHost"></div>
+    <div class="foot" id="homeFoot"></div>
+  </div>
+</section>
+
+<!-- ============ Module ============ -->
+<section class="screen" id="scr-mod">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="left">
+        <button class="iconbtn" id="btnBack" title="Back" aria-label="Back to menu">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 5.5 8 12l6.5 6.5"/>
+          </svg>
+        </button>
+        <div style="min-width:0">
+          <div class="mod-title" id="modTitle">—</div>
+          <div class="mod-sub" id="modSub"></div>
+        </div>
+      </div>
+      <button class="iconbtn" id="btnHome" title="Menu" aria-label="Menu">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4.5 4.5h5.5v5.5H4.5zM14 4.5h5.5v5.5H14zM4.5 14h5.5v5.5H4.5zM14 14h5.5v5.5H14z"/>
+        </svg>
+      </button>
+    </div>
+    <div id="modBody"></div>
+  </div>
+</section>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var CFG = window.APP_CFG;
+
+  // ---------- Supabase (data lives in the `team2` schema) ----------
+  var sb = window.supabase.createClient(CFG.url, CFG.key, {
+    db: { schema: "team2" },
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: "team2.auth" }
+  });
+  var emailOf = function (u) { return u.toLowerCase() + "@team2.app"; };
+
+  var me = null;        // signed-in profile row
+  var myAccess = {};    // menu_id -> access level, from the permission matrix
+
+  // ---------- Icons (24x24, stroked) ----------
+  var ICONS = {
+    clock:    "M12 20.4a8.4 8.4 0 1 0 0-16.8 8.4 8.4 0 0 0 0 16.8zM12 7.4V12l3 1.8",
+    calendar: "M5 6.4h14v13H5zM5 10.2h14M8.6 4.4v3M15.4 4.4v3M8.6 13.4h1.4M15 13.4h.02M8.6 16.4h1.4M15 16.4h.02",
+    pin:      "M12 20.5s6.2-5.4 6.2-9.6a6.2 6.2 0 1 0-12.4 0c0 4.2 6.2 9.6 6.2 9.6zM12 13a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z",
+    route:    "M6.8 20.4a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zM17.2 8a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zM17.2 8.2v3a3.4 3.4 0 0 1-3.4 3.4h-3.6a3.4 3.4 0 0 0-3.4 3.4v.2",
+    bag:      "M4.6 8.4h14.8v10.6H4.6zM9 8.4V6.2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2.2M4.6 12.6h14.8",
+    hourglass:"M7.4 4.4h9.2M7.4 19.6h9.2M8.4 4.4v3.2L12 11l3.6-3.4V4.4M8.4 19.6v-3.2L12 13l3.6 3.4v3.2",
+    edit:     "M4.6 19.4h4l9.4-9.4a1.8 1.8 0 0 0 0-2.6l-1.4-1.4a1.8 1.8 0 0 0-2.6 0L4.6 15.4zM13.8 7.2l3 3",
+    check:    "M12 20.4a8.4 8.4 0 1 0 0-16.8 8.4 8.4 0 0 0 0 16.8zM8.2 12.2l2.6 2.6 5-5.2",
+    building: "M4.6 20h14.8M6.4 20V5.2a1 1 0 0 1 1-1h5.2a1 1 0 0 1 1 1V20M13.6 9.6h4a1 1 0 0 1 1 1V20M9 8h1.6M9 11.4h1.6M9 14.8h1.6M15.8 13h1M15.8 16.4h1",
+    tag:      "M4.8 11.6V5.6a.8.8 0 0 1 .8-.8h6a.8.8 0 0 1 .57.23l6.9 6.9a.8.8 0 0 1 0 1.14l-5.9 5.9a.8.8 0 0 1-1.14 0l-6.9-6.9a.8.8 0 0 1-.23-.57zM8.4 8.6h.02",
+    map:      "M4.6 6.6l4.8-2 5.2 2 4.8-2v12.8l-4.8 2-5.2-2-4.8 2zM9.4 4.6v12.8M14.6 6.6v12.8",
+    grid:     "M4.5 4.5h5.5v5.5H4.5zM14 4.5h5.5v5.5H14zM4.5 14h5.5v5.5H4.5zM14 14h5.5v5.5H14z",
+    badge:    "M5.6 4.8h12.8a1 1 0 0 1 1 1v12.4a1 1 0 0 1-1 1H5.6a1 1 0 0 1-1-1V5.8a1 1 0 0 1 1-1zM9.6 4.8V3.6h4.8v1.2M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8.7 16.6a3.4 3.4 0 0 1 6.6 0",
+    star:     "M12 4.2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.9l5.4-.8z",
+    list:     "M8 7.4h11M8 12h11M8 16.6h11M4.9 7.4h.02M4.9 12h.02M4.9 16.6h.02",
+    key:      "M10.6 13.4a4.4 4.4 0 1 1 3.2 1.3M10.6 13.4L5.2 18.8v1.6h2.6v-1.8h1.8v-1.8h1.6l1.2-1.2M15.6 8.4h.02",
+    chart:    "M4.5 19.5h15M7.6 19.5v-5.4M12 19.5V8.6M16.4 19.5v-8.2",
+    car:      "M4.8 15.2h14.4M6.4 15.2l1.5-4.7a1.4 1.4 0 0 1 1.33-.98h5.54a1.4 1.4 0 0 1 1.33.98l1.5 4.7M6.4 15.2v2.6M17.6 15.2v2.6M8.4 18.4h.02M15.6 18.4h.02",
+    users:    "M9.4 11.6a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8zM3.4 19.4a6 6 0 0 1 12 0M16.2 5.2a3.4 3.4 0 0 1 0 6.6M17.6 13.9a6 6 0 0 1 3.2 5.5",
+    sliders:  "M4.6 7.6h8.8M17.4 7.6h2M4.6 16.4h2.2M11 16.4h8.4M15.4 5.6v4M8.8 14.4v4",
+    cog:      "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.1 13.4l1.9 1.4-1.6 2.8-2.2-.9a7 7 0 0 1-1.9 1.1l-.3 2.4h-3.2l-.3-2.4a7 7 0 0 1-1.9-1.1l-2.2.9L5.8 14.8l1.9-1.4a7 7 0 0 1 0-2.2L5.8 9.8l1.6-2.8 2.2.9a7 7 0 0 1 1.9-1.1l.3-2.4h3.2l.3 2.4a7 7 0 0 1 1.9 1.1l2.2-.9 1.6 2.8-1.9 1.4a7 7 0 0 1 0 2.4z"
+  };
+
+  function svg(name, size) {
+    var d = ICONS[name] || ICONS.grid;
+    return '<svg width="' + (size || 19) + '" height="' + (size || 19) + '" viewBox="0 0 24 24" ' +
+           'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
+           'stroke-linejoin="round"><path d="' + d + '"/></svg>';
+  }
+
+  // ---------- The menus ----------
+  // Every one is an empty screen until its behaviour is specified.
+  // For masters, `id` is the table name so the permission matrix keys on one value.
+  // `roles` limits who sees the tile; leave it out for "everyone".
+  var MENUS = [
+    { group: "Daily", id: "punch",         label: "Punch In / Out",  desc: "Mark attendance with GPS",     icon: "clock" },
+    { group: "Daily", id: "attendance",    label: "My Attendance",   desc: "Day-wise register",            icon: "calendar" },
+    { group: "Daily", id: "visits",        label: "Visits",          desc: "Plan, check in, check out",    icon: "pin" },
+    { group: "Daily", id: "visit_tracks",  label: "Live Tracking",   desc: "Where the team is today",      icon: "route" },
+
+    { group: "Requests", id: "leave_requests",      label: "Leave",          desc: "Apply and track leave",   icon: "bag" },
+    { group: "Requests", id: "permission_requests", label: "Permission",     desc: "Short leave in hours",    icon: "hourglass" },
+    { group: "Requests", id: "regularisations",     label: "Regularisation", desc: "Fix a missed punch",      icon: "edit" },
+    { group: "Requests", id: "approvals",           label: "Approvals",      desc: "Act on your team's requests", icon: "check",
+      roles: ["superadmin", "admin", "manager"] },
+
+    { group: "Masters", id: "parties",         label: "Customer / Site", desc: "Who the team visits",    icon: "building" },
+    { group: "Masters", id: "visit_purposes",  label: "Visit Purpose",   desc: "Reasons for a visit",    icon: "tag" },
+    { group: "Masters", id: "locations",       label: "Location",        desc: "Offices &amp; geofences",    icon: "map" },
+    { group: "Masters", id: "departments",     label: "Department",      desc: "Departments",            icon: "grid" },
+    { group: "Masters", id: "designations",    label: "Designation",     desc: "Job titles",             icon: "badge" },
+    { group: "Masters", id: "shifts",          label: "Shift",           desc: "Timings &amp; week offs",    icon: "clock" },
+    { group: "Masters", id: "holidays",        label: "Holiday",         desc: "Holiday calendar",       icon: "star" },
+    { group: "Masters", id: "leave_types",     label: "Leave Type",      desc: "Quotas &amp; rules",         icon: "list" },
+    { group: "Masters", id: "roles",           label: "Role",            desc: "Login roles",            icon: "key" },
+
+    { group: "Reports", id: "reports", label: "Reports",           desc: "Attendance, leave, visits", icon: "chart" },
+    { group: "Reports", id: "trips",   label: "Travel / Distance", desc: "Km travelled &amp; claims",     icon: "car" },
+
+    { group: "Admin", id: "users",       label: "User Master", desc: "Logins &amp; reporting line", icon: "users",
+      roles: ["superadmin", "admin"] },
+    { group: "Admin", id: "permissions", label: "Permissions", desc: "What each role can do",   icon: "sliders",
+      roles: ["superadmin", "admin"] },
+    { group: "Admin", id: "settings",    label: "Settings",    desc: "Tracking &amp; punch rules",  icon: "cog",
+      roles: ["superadmin", "admin"] }
+  ];
+
+  var GROUP_ORDER = ["Daily", "Requests", "Masters", "Reports", "Admin"];
+
+  var MENU_BY_ID = {};
+  MENUS.forEach(function (m) { MENU_BY_ID[m.id] = m; });
+
+  // ---------- Screens ----------
+  function show(id) {
+    ["scr-login", "scr-home", "scr-mod"].forEach(function (s) {
+      $(s).classList.toggle("active", s === id);
+    });
+    window.scrollTo(0, 0);
+  }
+
+  function setMsg(el, text, ok) {
+    el.textContent = text || "";
+    el.classList.toggle("err", !!text && !ok);
+    el.classList.toggle("ok", !!text && !!ok);
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // ---------- Permission matrix, as it applies to the signed-in user ----------
+  // Mirrors team2.can_view / can_edit in the database. The database is what
+  // actually protects the data; this only decides which tiles are shown.
+  async function loadMyAccess() {
+    myAccess = {};
+    if (!me || !me.role_id) return;
+    var r = await sb.from("role_permissions").select("menu_id, access").eq("role_id", me.role_id);
+    if (r.error || !r.data) return;
+    r.data.forEach(function (row) { myAccess[row.menu_id] = row.access; });
+  }
+
+  function menuVisible(m) {
+    if (m.roles && m.roles.indexOf(me.role) === -1) return false;
+    if (me.role === "superadmin" || me.role === "admin") return true;
+    var a = myAccess[m.id];
+    if (a === undefined) return true;    // matrix says nothing — stay visible
+    return a !== "none";
+  }
+
+  function renderMenu() {
+    var host = $("menuHost");
+    host.innerHTML = "";
+    var mine = MENUS.filter(menuVisible);
+
+    GROUP_ORDER.forEach(function (g) {
+      var inGroup = mine.filter(function (m) { return m.group === g; });
+      if (!inGroup.length) return;
+
+      var title = document.createElement("div");
+      title.className = "group-title";
+      title.textContent = g;
+      host.appendChild(title);
+
+      var grid = document.createElement("div");
+      grid.className = "menu-grid";
+      inGroup.forEach(function (m) {
+        var b = document.createElement("button");
+        b.className = "tile";
+        b.type = "button";
+        b.innerHTML =
+          '<span class="ic">' + svg(m.icon) + '</span>' +
+          '<span class="t-label">' + m.label + '</span>' +
+          '<span class="t-desc">' + m.desc + '</span>';
+        b.addEventListener("click", function () { openModule(m.id); });
+        grid.appendChild(b);
+      });
+      host.appendChild(grid);
+    });
+
+    $("homeFoot").textContent = "Team2 " + CFG.version;
+  }
+
+  function openModule(id) {
+    var m = MENU_BY_ID[id];
+    if (!m) return;
+    if (!menuVisible(m)) { goHome(); return; }
+    $("modTitle").innerHTML = m.label;
+    $("modSub").innerHTML = m.desc;
+    var host = $("modBody");
+    host.innerHTML = m.render ? "" : placeholderHTML(m);
+    if (m.render) m.render(host);
+    location.hash = "#" + id;
+    show("scr-mod");
+  }
+
+  function placeholderHTML(m) {
+    return '<div class="panel"><div class="placeholder">' +
+      '<div class="ic">' + svg(m.icon, 24) + '</div>' +
+      '<h3>Nothing here yet</h3>' +
+      '<p>&ldquo;' + m.label + '&rdquo; has no screen yet — say what it should show and do, ' +
+      'and it gets built here.</p>' +
+      '</div></div>';
+  }
+
+  function goHome() {
+    if (location.hash) location.hash = "";
+    show("scr-home");
+  }
+
+  // ---------- Google Maps ----------
+  // Loaded on demand, once, and only when a key is configured. Every caller
+  // resolves to null when there is no key, so screens degrade to raw lat/lng.
+  var GMaps = (function () {
+    var loading = null;
+
+    function load() {
+      if (!CFG.gmapsKey) return Promise.resolve(null);
+      if (loading) return loading;
+      loading = new Promise(function (resolve, reject) {
+        var s = document.createElement("script");
+        s.src = "https://maps.googleapis.com/maps/api/js?key=" +
+                encodeURIComponent(CFG.gmapsKey) + "&libraries=places&loading=async";
+        s.async = true;
+        s.onload = function () { resolve(window.google && window.google.maps ? window.google.maps : null); };
+        s.onerror = function () { reject(new Error("Google Maps failed to load")); };
+        document.head.appendChild(s);
+      });
+      return loading;
+    }
+
+    // Browser GPS. Always available — no Google key needed.
+    function here(opts) {
+      return new Promise(function (resolve, reject) {
+        if (!navigator.geolocation) { reject(new Error("This device has no GPS")); return; }
+        navigator.geolocation.getCurrentPosition(
+          function (p) {
+            resolve({
+              lat: p.coords.latitude, lng: p.coords.longitude,
+              accuracy_m: p.coords.accuracy,
+              speed_kmph: p.coords.speed == null ? null : p.coords.speed * 3.6,
+              heading: p.coords.heading, at: new Date(p.timestamp).toISOString()
+            });
+          },
+          function (e) { reject(new Error(e.code === 1 ? "Location permission denied" : "Could not get your location")); },
+          Object.assign({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }, opts || {})
+        );
+      });
+    }
+
+    // Geocoding API — lat/lng to a street address.
+    async function address(lat, lng) {
+      var maps = await load();
+      if (!maps) return null;
+      var res = await new Promise(function (resolve) {
+        new maps.Geocoder().geocode({ location: { lat: lat, lng: lng } }, function (r, status) {
+          resolve(status === "OK" && r && r.length ? r[0] : null);
+        });
+      });
+      return res ? { text: res.formatted_address, place_id: res.place_id } : null;
+    }
+
+    // Places API — attach autocomplete to a text input; onPick gets name/address/lat/lng/place_id.
+    async function autocomplete(input, onPick) {
+      var maps = await load();
+      if (!maps || !maps.places) return null;
+      var ac = new maps.places.Autocomplete(input, {
+        fields: ["name", "formatted_address", "geometry", "place_id"],
+        componentRestrictions: { country: "in" }
+      });
+      ac.addListener("place_changed", function () {
+        var p = ac.getPlace();
+        if (!p || !p.geometry) return;
+        onPick({
+          name: p.name, address: p.formatted_address, place_id: p.place_id,
+          lat: p.geometry.location.lat(), lng: p.geometry.location.lng()
+        });
+      });
+      return ac;
+    }
+
+    // Distance Matrix API — driving road distance in km between two points.
+    async function roadKm(from, to) {
+      var maps = await load();
+      if (!maps) return null;
+      var r = await new Promise(function (resolve) {
+        new maps.DistanceMatrixService().getDistanceMatrix({
+          origins: [{ lat: from.lat, lng: from.lng }],
+          destinations: [{ lat: to.lat, lng: to.lng }],
+          travelMode: "DRIVING"
+        }, function (res, status) {
+          var e = status === "OK" && res && res.rows[0] && res.rows[0].elements[0];
+          resolve(e && e.status === "OK" ? e : null);
+        });
+      });
+      return r ? { km: r.distance.value / 1000, minutes: Math.round(r.duration.value / 60) } : null;
+    }
+
+    return { load: load, here: here, address: address, autocomplete: autocomplete, roadKm: roadKm,
+             enabled: function () { return !!CFG.gmapsKey; } };
+  })();
+
+  window.Team2 = { sb: sb, GMaps: GMaps, me: function () { return me; } };
+
+  // ---------- Session ----------
+  async function startSession() {
+    var s = await sb.auth.getSession();
+    if (!s.data.session) { show("scr-login"); return false; }
+    var uname = (s.data.session.user.email || "").split("@")[0];
+
+    var r = await sb.from("profiles").select("*").eq("username", uname).maybeSingle();
+    if (r.error) { setMsg($("loginMsg"), "Could not load your profile"); show("scr-login"); return false; }
+    if (!r.data) {
+      setMsg($("loginMsg"), "No user profile for this login");
+      await sb.auth.signOut(); show("scr-login"); return false;
+    }
+    if (!r.data.active) {
+      setMsg($("loginMsg"), "This account is inactive");
+      await sb.auth.signOut(); show("scr-login"); return false;
+    }
+
+    me = r.data;
+    await loadMyAccess();
+    setMsg($("loginMsg"), "");
+    $("whoName").textContent = me.name || me.username;
+    $("whoRole").textContent = me.role;
+    renderMenu();
+
+    var want = (location.hash || "").replace("#", "");
+    if (want && MENU_BY_ID[want]) openModule(want); else show("scr-home");
+    return true;
+  }
+
+  function signOut() {
+    sb.auth.signOut();
+    me = null; myAccess = {};
+    $("f-u").value = ""; $("f-p").value = "";
+    setMsg($("loginMsg"), "");
+    location.hash = "";
+    show("scr-login");
+  }
+
+  // ---------- Wiring ----------
+  $("loginVer").textContent = "Version " + CFG.version;
+
+  $("loginForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var u = $("f-u").value.trim();
+    var p = $("f-p").value;
+    $("f-p").value = "";
+    if (!u || !p) { setMsg($("loginMsg"), "Enter mobile number and password"); return; }
+    $("loginBtn").disabled = true;
+    setMsg($("loginMsg"), "Signing in…", true);
+    try {
+      var res = await sb.auth.signInWithPassword({ email: emailOf(u), password: p });
+      if (res.error) { setMsg($("loginMsg"), "Invalid credentials"); return; }
+      await startSession();
+    } catch (err) {
+      setMsg($("loginMsg"), "Could not reach the server — check your connection");
+    } finally {
+      $("loginBtn").disabled = false;
+    }
+  });
+
+  $("btnOut").addEventListener("click", signOut);
+  $("btnBack").addEventListener("click", goHome);
+  $("btnHome").addEventListener("click", goHome);
+
+  window.addEventListener("hashchange", function () {
+    if (!me) return;
+    var want = (location.hash || "").replace("#", "");
+    if (want && MENU_BY_ID[want]) openModule(want); else show("scr-home");
+  });
+
+  startSession();
+})();
+</script>
+</body>
+</html>
