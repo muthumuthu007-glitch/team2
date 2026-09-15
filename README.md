@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.1.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.2.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -35,6 +35,19 @@ Asset `8126`, **Team2 `8127`**, prodwatch `8777`.
 
 **Built:** the shell. Login, session, the menu grid, hash routing, and the
 permission matrix deciding which tiles a role sees.
+
+**Login page** (v0.2.0) is modelled on the Carloo Tex *Field Force Management*
+login, with the **Gate** tab deliberately removed. Three tabs:
+
+| Tab | Who gets in |
+|---|---|
+| Admin | `superadmin`, `admin`, `manager` — anyone else is signed straight back out and told to use Team |
+| Team | Any active profile |
+| Visitor | Nobody yet — there is no visitor role or module, so the form refuses to sign in |
+
+The role rule is checked only at sign-in; a reload with a live session goes
+straight in. The last tab used is remembered per browser. The Carloo mark is
+set in type (Calibri) — swap in the real logo file when there is one.
 
 **Every menu is an empty placeholder.** They get built one at a time, once the
 behaviour for that menu is described. The 22 menus are:

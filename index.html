@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.1.0",
+    version: "0.2.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -105,16 +105,73 @@
   .msg.err { color: var(--error); }
   .msg.ok  { color: var(--ok); }
 
-  /* ---------- Login ---------- */
+  /* ---------- Login (Carloo Tex look) ---------- */
   #scr-login { display: none; }
-  #scr-login.active { display: flex; align-items: center; justify-content: center; padding: 26px var(--pad); }
-  .login-wrap { width: min(380px, 100%); display: flex; flex-direction: column; gap: 26px; }
-  .login-wrap .brand { justify-content: center; }
-  form.login { display: flex; flex-direction: column; gap: 15px; }
-  .login-ver {
-    margin-top: -12px; text-align: center;
-    font-size: 10px; font-weight: 700; color: var(--muted);
-    letter-spacing: 0.15em; text-transform: uppercase;
+  #scr-login.active {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh;
+    padding: calc(34px + env(safe-area-inset-top)) var(--pad) calc(26px + env(safe-area-inset-bottom));
+    background: linear-gradient(135deg, #f6f8fe 0%, #ffffff 48%, #f8f7fd 100%);
+    --lg-blue: #4169e1;
+  }
+  .lg-head { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 30px; }
+  .lg-logo { background: #fff; padding: 4px 14px 8px; margin-bottom: 20px; line-height: 1; }
+  .lg-wordmark {
+    position: relative; display: inline-block;
+    font-family: Calibri, Candara, "Segoe UI", system-ui, sans-serif;
+    font-size: 62px; font-weight: 400; color: #231f20; letter-spacing: -1.2px;
+  }
+  .lg-wordmark sup { position: absolute; top: 7px; right: -11px; font-size: 11px; }
+  .lg-title { font-size: 28px; font-weight: 700; color: #111827; letter-spacing: -0.01em; }
+  .lg-sub { font-size: 15px; color: #4b5563; margin-top: 8px; }
+  .lg-ver {
+    margin-top: 12px; padding: 2px 10px; border-radius: 999px;
+    background: #f3f4f6; border: 1px solid #e5e7eb; color: #374151;
+    font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 10.5px;
+  }
+  .lg-card {
+    width: min(480px, 100%); background: #fff; border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(17, 24, 39, 0.08), 0 1px 3px rgba(17, 24, 39, 0.05);
+    padding: 34px 34px 30px;
+  }
+  .lg-tabs {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    background: #f3f4f6; border-radius: 11px; padding: 4px; margin-bottom: 28px;
+  }
+  .lg-tab {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    border: 0; background: transparent; border-radius: 8px; padding: 10px 4px;
+    font: inherit; font-size: 14px; font-weight: 500; color: #6b7280; cursor: pointer;
+  }
+  .lg-tab svg { flex: 0 0 auto; }
+  .lg-tab[aria-selected="true"] { background: #fff; color: var(--lg-blue); box-shadow: 0 1px 3px rgba(17, 24, 39, 0.12); }
+  .lg-tab:focus-visible { outline: 2px solid var(--lg-blue); outline-offset: 1px; }
+  .lg-h { font-size: 24px; font-weight: 700; color: #111827; }
+  .lg-hsub { font-size: 14px; color: #4b5563; margin-top: 6px; }
+  .lg-form { display: flex; flex-direction: column; margin-top: 30px; }
+  .lg-label { font-size: 15px; font-weight: 500; color: #374151; margin-bottom: 9px; }
+  .lg-input {
+    height: 52px; width: 100%; padding: 0 18px;
+    border: 1px solid #d1d5db; border-radius: 9px; background: #fff;
+    font: inherit; font-size: 16px; color: #111827; outline: none; caret-color: var(--lg-blue);
+  }
+  .lg-input::placeholder { color: #9ca3af; }
+  .lg-input:focus { border-color: var(--lg-blue); box-shadow: 0 0 0 3px rgba(65, 105, 225, 0.15); }
+  .lg-gap { height: 20px; }
+  .lg-btn {
+    margin-top: 26px; height: 52px; border: 0; border-radius: 9px;
+    background: var(--lg-blue); color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .lg-btn:hover { background: #3558c9; }
+  .lg-btn:active { transform: translateY(1px); }
+  .lg-btn[disabled] { opacity: 0.6; cursor: default; }
+  .lg-msg { margin-top: 12px; min-height: 18px; }
+  .lg-foot { margin-top: 34px; font-size: 13px; color: #4b5563; text-align: center; }
+  @media (max-width: 420px) {
+    .lg-card { padding: 26px 20px 22px; }
+    .lg-wordmark { font-size: 52px; }
+    .lg-title { font-size: 25px; }
+    .lg-tab { font-size: 13px; gap: 5px; }
   }
 
   /* ---------- Shell ---------- */
@@ -189,33 +246,52 @@
 <body>
 
 <!-- ============ Login ============ -->
+<!-- Modelled on the Carloo Tex Field Force Management login, without the Gate tab. -->
 <section class="screen active" id="scr-login">
-  <div class="login-wrap">
-    <div class="brand">
-      <div class="logo">T</div>
-      <div>
-        <div class="word">Team2</div>
-        <span class="sub">Attendance &amp; Field Visits</span>
-      </div>
-    </div>
-    <form class="panel login" id="loginForm" autocomplete="off">
-      <div class="field">
-        <label for="f-u">Mobile number</label>
-        <input class="txt" id="f-u" name="pl-k41c" type="tel" inputmode="numeric"
-               autocapitalize="none" autocomplete="off" spellcheck="false" readonly
-               onfocus="this.removeAttribute('readonly')">
-      </div>
-      <div class="field">
-        <label for="f-p">Password</label>
-        <input class="txt" id="f-p" name="pl-q78x" type="password"
-               autocomplete="new-password" readonly
-               onfocus="this.removeAttribute('readonly')">
-      </div>
-      <button class="go" type="submit" id="loginBtn">Sign in</button>
-      <div class="msg" id="loginMsg"></div>
-    </form>
-    <div class="login-ver" id="loginVer"></div>
+  <div class="lg-head">
+    <div class="lg-logo" role="img" aria-label="Carloo"><span class="lg-wordmark">Carloo<sup>&reg;</sup></span></div>
+    <h1 class="lg-title">Carloo Tex</h1>
+    <p class="lg-sub">Field Force Management</p>
+    <span class="lg-ver" id="loginVer"></span>
   </div>
+
+  <div class="lg-card">
+    <div class="lg-tabs" role="tablist" aria-label="Sign in as">
+      <button type="button" class="lg-tab" role="tab" data-mode="admin" aria-selected="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Admin
+      </button>
+      <button type="button" class="lg-tab" role="tab" data-mode="team" aria-selected="false" tabindex="-1">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Team
+      </button>
+      <button type="button" class="lg-tab" role="tab" data-mode="visitor" aria-selected="false" tabindex="-1">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M2 21a8 8 0 0 1 13.29-5.96M10 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM16 19l2 2 4-4"/></svg>
+        Visitor
+      </button>
+    </div>
+
+    <h2 class="lg-h" id="lgHead">Admin Sign In</h2>
+    <p class="lg-hsub" id="lgSub">Manage staff, visits &amp; approvals</p>
+
+    <form class="lg-form" id="loginForm" autocomplete="off">
+      <label class="lg-label" for="f-u">Mobile Number</label>
+      <input class="lg-input" id="f-u" name="pl-k41c" type="tel" inputmode="numeric" maxlength="10"
+             placeholder="Mobile number" autocapitalize="none" autocomplete="off" spellcheck="false"
+             readonly onfocus="this.removeAttribute('readonly')">
+      <div class="lg-gap"></div>
+      <label class="lg-label" for="f-p">Password</label>
+      <input class="lg-input" id="f-p" name="pl-q78x" type="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+             autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')">
+      <button class="lg-btn" type="submit" id="loginBtn">Login as Admin</button>
+      <div class="msg lg-msg" id="loginMsg" role="status" aria-live="polite"></div>
+    </form>
+  </div>
+
+  <p class="lg-foot">&copy; <span id="lgYear">2026</span> Carloo Tex. All rights reserved.</p>
 </section>
 
 <!-- ============ Home ============ -->
@@ -555,7 +631,9 @@
   window.Team2 = { sb: sb, GMaps: GMaps, me: function () { return me; } };
 
   // ---------- Session ----------
-  async function startSession() {
+  // `mode` is passed only on a fresh sign-in, so a tab's role rule is checked then —
+  // a reload with a live session goes straight in.
+  async function startSession(mode) {
     var s = await sb.auth.getSession();
     if (!s.data.session) { show("scr-login"); return false; }
     var uname = (s.data.session.user.email || "").split("@")[0];
@@ -568,6 +646,10 @@
     }
     if (!r.data.active) {
       setMsg($("loginMsg"), "This account is inactive");
+      await sb.auth.signOut(); show("scr-login"); return false;
+    }
+    if (mode && mode.roles && mode.roles.indexOf(r.data.role) === -1) {
+      setMsg($("loginMsg"), mode.deniedMsg);
       await sb.auth.signOut(); show("scr-login"); return false;
     }
 
@@ -593,20 +675,73 @@
   }
 
   // ---------- Wiring ----------
-  $("loginVer").textContent = "Version " + CFG.version;
+  $("loginVer").textContent = "Ver " + CFG.version;
+  $("lgYear").textContent = new Date().getFullYear();
+
+  // ---------- Login tabs ----------
+  // Gate is deliberately left out. Visitor has no role or module yet, so its form
+  // does not sign anyone in until that is specified.
+  var LOGIN_MODES = {
+    admin:   { head: "Admin Sign In",   sub: "Manage staff, visits & approvals", btn: "Login as Admin",
+               roles: ["superadmin", "admin", "manager"],
+               deniedMsg: "This account has no admin access \u2014 sign in on the Team tab" },
+    team:    { head: "Team Sign In",    sub: "Attendance, visits & requests",     btn: "Login as Team" },
+    visitor: { head: "Visitor Sign In", sub: "Sign in for your visit",            btn: "Login as Visitor",
+               notReady: true }
+  };
+  var TAB_ORDER = ["admin", "team", "visitor"];
+  var loginMode = "admin";
+  try {
+    var savedMode = localStorage.getItem("team2.loginMode");
+    if (LOGIN_MODES[savedMode]) loginMode = savedMode;
+  } catch (e) { /* storage blocked — the default tab is fine */ }
+
+  function setLoginMode(mode, focusTab) {
+    loginMode = mode;
+    var cfg = LOGIN_MODES[mode];
+    document.querySelectorAll(".lg-tab").forEach(function (t) {
+      var on = t.dataset.mode === mode;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      if (on && focusTab) t.focus();
+    });
+    $("lgHead").textContent = cfg.head;
+    $("lgSub").textContent = cfg.sub;
+    $("loginBtn").textContent = cfg.btn;
+    setMsg($("loginMsg"), "");
+    try { localStorage.setItem("team2.loginMode", mode); } catch (e) { /* ignore */ }
+  }
+
+  document.querySelectorAll(".lg-tab").forEach(function (t) {
+    t.addEventListener("click", function () { setLoginMode(t.dataset.mode); });
+    t.addEventListener("keydown", function (e) {
+      var i = TAB_ORDER.indexOf(loginMode);
+      if (e.key === "ArrowRight") { e.preventDefault(); setLoginMode(TAB_ORDER[(i + 1) % 3], true); }
+      if (e.key === "ArrowLeft")  { e.preventDefault(); setLoginMode(TAB_ORDER[(i + 2) % 3], true); }
+    });
+  });
+  setLoginMode(loginMode);
+
+  // Mobile numbers only: digits, ten of them.
+  $("f-u").addEventListener("input", function () {
+    var digits = this.value.replace(/\D/g, "").slice(0, 10);
+    if (digits !== this.value) this.value = digits;
+  });
 
   $("loginForm").addEventListener("submit", async function (e) {
     e.preventDefault();
+    var cfg = LOGIN_MODES[loginMode];
     var u = $("f-u").value.trim();
     var p = $("f-p").value;
     $("f-p").value = "";
+    if (cfg.notReady) { setMsg($("loginMsg"), "Visitor sign-in isn't set up yet"); return; }
     if (!u || !p) { setMsg($("loginMsg"), "Enter mobile number and password"); return; }
     $("loginBtn").disabled = true;
     setMsg($("loginMsg"), "Signing in…", true);
     try {
       var res = await sb.auth.signInWithPassword({ email: emailOf(u), password: p });
       if (res.error) { setMsg($("loginMsg"), "Invalid credentials"); return; }
-      await startSession();
+      await startSession(cfg);
     } catch (err) {
       setMsg($("loginMsg"), "Could not reach the server — check your connection");
     } finally {
