@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.2",
+    version: "0.9.3",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -316,6 +316,19 @@
   }
   .banner b { color: #5d4416; }
   .saved-tag { font-size: 11.5px; color: var(--ok); font-weight: 600; }
+  .wa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .wa-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+  .wa-card-head { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .wa-card-head b { display: block; font-size: 13.5px; color: var(--ink); }
+  .wa-card-head span { font-size: 11.5px; color: var(--muted); }
+  .wa-stage { background: #efeae2; padding: 14px 12px; }
+  .wa-bubble { background: #e1f5c8; border-radius: 10px; overflow: hidden; max-width: 260px; margin-left: auto;
+               box-shadow: 0 1px 1px rgba(0,0,0,.08); font-size: 13px; color: #111; }
+  .wa-img { height: 96px; background: #e6e9ee; display: flex; align-items: center; justify-content: center; color: #9aa1ab; }
+  .wa-text { padding: 8px 10px; white-space: pre-wrap; line-height: 1.45; }
+  .wa-var { background: #fff3c4; border-radius: 4px; padding: 0 3px; font-weight: 600; }
+  .wa-btn { border-top: 1px solid #c9dcb4; padding: 8px 10px; text-align: center; color: #2f6fd0; font-weight: 600; }
+  .wa-meta { padding: 9px 12px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
   /* ---------- Permission matrix ---------- */
   .matrix-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: #fff; }
@@ -1824,13 +1837,14 @@
   var INTEGRATIONS = [
     {
       provider: "whatsapp", icon: "users", title: "WhatsApp API",
-      note: "Meta WhatsApp Cloud API. The access token is stored admin-only.",
+      note: "Team2's own WhatsApp account — separate from Muthu's. The access token is stored admin-only. " +
+            "Sending needs the provider's API address, which is not confirmed yet.",
       config: [
-        { k: "phone_number_id",     label: "Phone number ID" },
-        { k: "business_account_id", label: "WhatsApp business account ID" },
-        { k: "api_version",         label: "API version", ph: "v21.0" }
+        { k: "provider_name", label: "Provider", ph: "e.g. whatapp.in" },
+        { k: "api_url",       label: "API base URL", ph: "from the provider's API documentation" }
       ],
-      secret: [{ k: "access_token", label: "Permanent access token" }]
+      secret: [{ k: "access_token", label: "Access API key" }],
+      templates: true
     },
     {
       provider: "sms", icon: "list", title: "SMS settings",
@@ -1878,6 +1892,29 @@
            '</div>';
   }
 
+  // WhatsApp-style preview of an approved template, placeholders highlighted.
+  function renderWaTemplates(host, templates) {
+    var keys = Object.keys(templates);
+    if (!keys.length) { host.innerHTML = '<div class="hint">No templates registered.</div>'; return; }
+    host.innerHTML = keys.map(function (k) {
+      var t = templates[k] || {};
+      var body = esc(t.body || "").replace(/\{\{(\d+)\}\}/g, '<span class="wa-var">{{$1}}</span>');
+      return '<div class="wa-card">' +
+        '<div class="wa-card-head"><b>' + esc(t.label || k) + '</b>' +
+          '<span>Template: ' + esc(t.name || "—") + '</span></div>' +
+        '<div class="wa-stage"><div class="wa-bubble">' +
+          (t.header === "image" ? '<div class="wa-img">' + svg("grid", 26) + '</div>' : '') +
+          '<div class="wa-text">' + body + '</div>' +
+          (t.button ? '<div class="wa-btn">' + esc(t.button) + '</div>' : '') +
+        '</div></div>' +
+        '<div class="wa-meta">' + esc(t.purpose || "") +
+          ' · ' + (t.variables || 0) + ' placeholder' + (t.variables === 1 ? "" : "s") +
+          (t.header === "image" ? ' · image header' : '') +
+          (t.expiry_minutes ? ' · expires in ' + t.expiry_minutes + ' min' : '') +
+        '</div></div>';
+    }).join("");
+  }
+
   function renderSettings(host) {
     host.innerHTML =
       '<div class="banner">' +
@@ -1917,6 +1954,10 @@
               '<input class="txt" id="set-' + it.provider + '-' + f.k + '" type="password" ' +
                 'autocomplete="new-password" placeholder="Enter to set or replace"></div>';
           }).join("") +
+          (it.templates ? '<div class="sec"><span class="sec-title">Approved templates</span>' +
+            '<div class="wa-grid" id="set-' + it.provider + '-templates"><div class="hint">Loading…</div></div>' +
+            '<span class="sec-note">These match the templates approved on the WhatsApp account word for word, ' +
+            'including their wording — a send must fill exactly these placeholders.</span></div>' : '') +
           '<label class="chk"><input type="checkbox" id="set-' + it.provider + '-enabled"> Enabled</label>' +
           '<div class="msg" id="set-' + it.provider + '-msg"></div>' +
           '<div class="modal-acts">' +
@@ -1982,13 +2023,17 @@
           if (tag) tag.textContent = row.secret && row.secret[f.k] ? "· saved" : "";
         });
         $("set-" + it.provider + "-enabled").checked = !!row.enabled;
+        if (it.templates) renderWaTemplates($("set-" + it.provider + "-templates"), (row.config || {}).templates || {});
 
         $("set-" + it.provider + "-save").addEventListener("click", async function () {
           var msg = $("set-" + it.provider + "-msg");
-          var config = {};
+          // Start from what is stored so keys the form does not show (e.g. the WhatsApp
+          // templates) survive a save.
+          var config = Object.assign({}, row.config || {});
           it.config.forEach(function (f) {
             var el = $("set-" + it.provider + "-" + f.k);
-            if (el && el.value.trim()) config[f.k] = el.value.trim();
+            if (!el) return;
+            if (el.value.trim()) config[f.k] = el.value.trim(); else delete config[f.k];
           });
           // Keep any secret that was not retyped; blanks never wipe a stored value.
           var secret = Object.assign({}, row.secret || {});

@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.9.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.9.3 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -87,6 +87,32 @@ The Maps key is entered there, not in this file, so it never reaches the repo.
 
 Never move a token into `app_settings` — ordinary staff can read that table through
 the API. Secret boxes show "· saved" and stay blank; typing replaces, blank keeps.
+
+### WhatsApp (v0.9.3)
+
+**Team2's WhatsApp account is separate from Muthu's.** Muthu's uses whatapi.in with a
+per-template webhook (`muthus.whatsapp_config`, `muthus-whatsapp`). None of that is
+shared or reused here.
+
+Team2's provider is recorded as **whatapp.in**; its access key is stored in
+`team2.integrations.secret.access_token` (admin-only). Two approved templates are
+registered in `integrations.config.templates` and shown as previews in Settings:
+
+| Key | Called | Template | Placeholders | Use |
+|---|---|---|---|---|
+| `message` | **Message format** | `order details 0126` | `{{1}}`–`{{4}}`, image header | any general message |
+| `otp` | **OTP format** | `otp alert 48157` | `{{1}}` = the code, Copy code button, expires in 2 min | login OTP, visitor OTP |
+
+The bodies are stored word for word as approved (including "Thanks you") — a send
+must match the approved template, so do not "correct" them.
+
+**Sending is not built yet:** `whatapp.in` has no DNS record, so its API address and
+request format are unconfirmed. The sender will be written once the provider's API
+documentation (endpoint, auth header, how variables are passed) is supplied. Sends will
+be logged to `team2.whatsapp_log`.
+
+Settings saves now **merge** into the stored config, so fields the form does not show
+(the templates) are never wiped by a Save.
 
 **Nothing sends yet.** A browser cannot hold a sending credential safely, so WhatsApp,
 SMS and email delivery each need an edge function. The screen says so.
