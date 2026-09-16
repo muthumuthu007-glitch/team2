@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.7.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.8.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -61,6 +61,8 @@ set in type (Calibri) — swap in the real logo file when there is one.
 | **Unit** | Name, address (Google Places search), city, pincode, active. Geofence is a **circle** (drag it, or set a radius) or a **polygon** you draw by clicking corners on the map, plus a **buffer** in metres. Stored in `team2.locations`. |
 | **Department** | Name + active, with **Export**, **Import** and a downloadable import template. |
 | **Designation** | Same screen as Department, different table. |
+| **Role** | Name, description, **Full access** (bypasses the matrix) and active, with Export / Import / template. Stored in `team2.roles`. |
+| **Permissions** | The role × menu matrix (v0.8.0) — see below. |
 | **Schedule** | Was "Shift". Name, day check-in/out, three tea breaks (window + minutes), lunch (window + minutes) and permission hours per 26-day month. Shows how many staff are on each schedule, with an **In use only** filter, plus Export / Template / Import. Stored in `team2.shifts`. |
 
 Department and Designation share one `simpleMaster(host, cfg)` function — another
@@ -187,6 +189,21 @@ The role permission matrix (`role_permissions`, one row per role × menu) is
 | `none` | Menu hidden |
 | `view_own` / `edit_own` | Own records + the team below you |
 | `view_all` / `edit_all` | Everything |
+
+### The Permissions screen (Admin › Permissions)
+
+A matrix: one row per menu (grouped Daily / Requests / Masters / Reports / Admin),
+one column per **active role** from the Role master. Each cell is a dropdown —
+No access, View – Own, View – All, Edit – Own, Edit – All — writing
+`team2.role_permissions`, which is what `team2.matrix_access()` reads in RLS.
+
+Columns that are **locked with a tick**: Superadmin (built in, always all rights) and
+any role flagged **Full access** (`roles.is_admin`) in the Role master.
+
+Changes are staged, not saved per click: edited cells are outlined, the button counts
+them ("Save 3 changes"), and setting a cell back to its original value drops it from
+the batch. Saving does one upsert on `(role_id, menu_id)`. A user picks up new rights
+on their next sign-in or reload.
 
 Rules that sit above the matrix and can't be configured away:
 

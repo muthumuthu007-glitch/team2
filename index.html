@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.7.0",
+    version: "0.8.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -315,6 +315,38 @@
   }
   .banner b { color: #5d4416; }
   .saved-tag { font-size: 11.5px; color: var(--ok); font-weight: 600; }
+
+  /* ---------- Permission matrix ---------- */
+  .matrix-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: #fff; }
+  table.matrix { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 13px; }
+  table.matrix th, table.matrix td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+  table.matrix thead th {
+    position: sticky; top: 0; z-index: 3; background: #f7f8fc;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  }
+  table.matrix th.page-col, table.matrix td.page-col {
+    position: sticky; left: 0; z-index: 2; background: #fff;
+    min-width: 190px; white-space: normal; font-weight: 600; color: var(--ink);
+  }
+  table.matrix thead th.page-col { z-index: 4; background: #f7f8fc; }
+  table.matrix tr.group-row td {
+    background: #f7f8fc; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted);
+    position: sticky; left: 0;
+  }
+  table.matrix select.cell {
+    width: 100%; min-width: 132px; font: inherit; font-size: 12.5px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 8px; background: #fbfcfe; color: var(--text); cursor: pointer;
+  }
+  table.matrix select.cell:focus { outline: none; border-color: var(--brand); }
+  select.cell[data-level="none"] { color: var(--muted); }
+  select.cell[data-level="view_own"], select.cell[data-level="view_all"] { background: #eef7f1; border-color: #cfe6d9; }
+  select.cell[data-level="edit_own"], select.cell[data-level="edit_all"] { background: #fdf7ee; border-color: #f0dcc2; }
+  select.cell.dirty { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(47, 75, 208, 0.12); }
+  .locked-col { text-align: center !important; color: var(--ok); }
+  .legend { font-size: 12px; color: var(--muted); line-height: 1.7; padding: 12px 2px 0; }
+  .legend b { color: var(--ink); font-weight: 600; }
+  .legend .key { color: var(--ink); font-weight: 600; }
   .sec-note b { color: var(--ink); font-weight: 600; }
   .count-badge {
     display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
@@ -561,7 +593,8 @@
       render: function (h) { renderSchedules(h); } },
     { group: "Masters", id: "holidays",        label: "Holiday",         desc: "Holiday calendar",       icon: "star" },
     { group: "Masters", id: "leave_types",     label: "Leave Type",      desc: "Quotas &amp; rules",         icon: "list" },
-    { group: "Masters", id: "roles",           label: "Role",            desc: "Login roles",            icon: "key" },
+    { group: "Masters", id: "roles",           label: "Role",            desc: "Roles &amp; their rights",   icon: "key",
+      render: function (h) { simpleMaster(h, ROLES_M); } },
 
     { group: "Reports", id: "reports", label: "Reports",           desc: "Attendance, leave, visits", icon: "chart" },
     { group: "Reports", id: "trips",   label: "Travel / Distance", desc: "Km travelled &amp; claims",     icon: "car" },
@@ -569,7 +602,8 @@
     { group: "Admin", id: "users",       label: "User Master", desc: "Logins &amp; reporting line", icon: "users",
       roles: ["superadmin", "admin"] },
     { group: "Admin", id: "permissions", label: "Permissions", desc: "What each role can do",   icon: "sliders",
-      roles: ["superadmin", "admin"] },
+      roles: ["superadmin", "admin"],
+      render: function (h) { renderPermissions(h); } },
     { group: "Admin", id: "settings",    label: "Settings",    desc: "Integrations &amp; keys",     icon: "cog",
       roles: ["superadmin", "admin"],
       render: function (h) { renderSettings(h); } }
@@ -873,6 +907,19 @@
     one: "designation", title: "Designation",
     placeholder: "e.g. Supervisor", sample: ["Supervisor", "Operator", "Executive"]
   };
+  // Roles carry two extra columns, so the same screen takes an `extra` list.
+  var ROLES_M = {
+    menuId: "roles", table: "roles", codeField: "role_code",
+    one: "role", title: "Role",
+    placeholder: "e.g. Merchandiser", sample: ["Merchandiser", "Supervisor", "Executive"],
+    extra: [
+      { k: "description", label: "Description", type: "text" },
+      { k: "is_admin", label: "Full access — bypasses the permission matrix", type: "checkbox" }
+    ],
+    meta: function (r) {
+      return [r.description, r.is_admin ? "Full access" : null].filter(Boolean).join(" · ");
+    }
+  };
 
   function simpleMaster(host, cfg) {
     var mayEdit = canEditMenu(cfg.menuId);
@@ -921,6 +968,7 @@
           '<div class="row-main">' +
             '<span class="row-code">' + esc(r[cfg.codeField]) + '</span>' +
             '<span class="row-name">' + esc(r.name) + '</span>' +
+            (cfg.meta && cfg.meta(r) ? '<span class="row-meta">' + esc(cfg.meta(r)) + '</span>' : '') +
           '</div>' +
           '<div class="row-acts">' +
             '<span class="pill ' + (r.active ? "on" : "off") + '">' + (r.active ? "Active" : "Inactive") + '</span>' +
@@ -963,6 +1011,12 @@
         '<div class="form-grid">' +
           '<div class="field"><label for="sm-name">' + cfg.title + ' name</label>' +
             '<input class="txt" id="sm-name" type="text" placeholder="' + cfg.placeholder + '" autocomplete="off"></div>' +
+          (cfg.extra || []).map(function (f) {
+            return f.type === "checkbox"
+              ? '<label class="chk"><input type="checkbox" id="sm-x-' + f.k + '"> ' + esc(f.label) + '</label>'
+              : '<div class="field"><label for="sm-x-' + f.k + '">' + esc(f.label) + '</label>' +
+                '<input class="txt" id="sm-x-' + f.k + '" type="text" autocomplete="off"></div>';
+          }).join("") +
           '<label class="chk"><input type="checkbox" id="sm-active" checked> Active</label>' +
           '<div class="msg" id="sm-msg"></div>' +
           '<div class="modal-acts">' +
@@ -971,6 +1025,12 @@
           '</div>' +
         '</div>');
       $("sm-name").value = row ? row.name : "";
+      (cfg.extra || []).forEach(function (f) {
+        var el = $("sm-x-" + f.k);
+        if (!el) return;
+        if (f.type === "checkbox") el.checked = row ? !!row[f.k] : false;
+        else el.value = row && row[f.k] != null ? row[f.k] : "";
+      });
       $("sm-active").checked = row ? !!row.active : true;
       $("sm-cancel").addEventListener("click", closeModal);
       $("sm-name").focus();
@@ -983,6 +1043,11 @@
         if (clash) { setMsg($("sm-msg"), "That name already exists"); return; }
 
         var payload = { name: name, active: $("sm-active").checked };
+        (cfg.extra || []).forEach(function (f) {
+          var el = $("sm-x-" + f.k);
+          if (!el) return;
+          payload[f.k] = f.type === "checkbox" ? el.checked : (el.value.trim() || null);
+        });
         $("sm-save").disabled = true;
         setMsg($("sm-msg"), "Saving…", true);
         var r = row
@@ -997,8 +1062,14 @@
 
     function exportCsv() {
       var list = visible();
-      var out = [["code", "name", "active"]].concat(list.map(function (r) {
-        return [r[cfg.codeField], r.name, r.active ? "yes" : "no"];
+      var extras = (cfg.extra || []).map(function (f) { return f.k; });
+      var out = [["code", "name"].concat(extras, ["active"])].concat(list.map(function (r) {
+        return [r[cfg.codeField], r.name].concat(
+          extras.map(function (k) {
+            var v = r[k];
+            return typeof v === "boolean" ? (v ? "yes" : "no") : (v == null ? "" : v);
+          }),
+          [r.active ? "yes" : "no"]);
       }));
       download(cfg.table + "-" + today() + ".csv", toCsv(out));
     }
@@ -1024,7 +1095,10 @@
       var pending = [];
       $("sm-icancel").addEventListener("click", closeModal);
       $("sm-tpl").addEventListener("click", function () {
-        var tpl = [["name", "active"]].concat(cfg.sample.map(function (n) { return [n, "yes"]; }));
+        var extras = (cfg.extra || []).map(function (f) { return f.k; });
+        var tpl = [["name"].concat(extras, ["active"])].concat(cfg.sample.map(function (n) {
+          return [n].concat(extras.map(function () { return ""; }), ["yes"]);
+        }));
         download(cfg.table + "-import-template.csv", toCsv(tpl));
       });
 
@@ -1050,7 +1124,15 @@
             var key = name.toLowerCase();
             if (existing[key] || seen[key]) { dup++; return; }
             seen[key] = true;
-            pending.push({ name: name, active: iActive === -1 ? true : truthy(r[iActive]), created_by: me.id });
+            var rec = { name: name, active: iActive === -1 ? true : truthy(r[iActive]), created_by: me.id };
+            (cfg.extra || []).forEach(function (f) {
+              var ix = head.indexOf(f.k);
+              if (ix === -1) return;
+              var raw = (r[ix] || "").trim();
+              if (f.type === "checkbox") rec[f.k] = raw ? truthy(raw) : false;
+              else if (raw) rec[f.k] = raw;
+            });
+            pending.push(rec);
           });
 
           $("sm-preview").innerHTML = '<div class="panel state" style="padding:14px">' +
@@ -1076,6 +1158,155 @@
         closeModal();
         load();
       });
+    }
+
+    load();
+  }
+
+  // ---------- Permission matrix ----------
+  // One row per menu, one column per role in the Role master. Writes
+  // team2.role_permissions, which RLS reads back through team2.matrix_access().
+  var ACCESS_LEVELS = [
+    { v: "none",     label: "No access" },
+    { v: "view_own", label: "View \u2013 Own" },
+    { v: "view_all", label: "View \u2013 All" },
+    { v: "edit_own", label: "Edit \u2013 Own" },
+    { v: "edit_all", label: "Edit \u2013 All" }
+  ];
+
+  var TICK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+             'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+  var LOCK = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+             'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+             '<path d="M6 10.5h12v9H6zM8.5 10.5V7a3.5 3.5 0 0 1 7 0v3.5"/></svg>';
+
+  function renderPermissions(host) {
+    var roles = [], current = {}, pending = {};
+
+    host.innerHTML =
+      '<div class="panel toolbar">' +
+        '<span class="hint" style="flex:1 1 220px">Control which role can reach each menu, and ' +
+          'whether it may edit. Superadmin and admin always have every right.</span>' +
+        '<button class="mini" id="pm-reset" type="button" disabled>Discard changes</button>' +
+        '<button class="go compact" id="pm-save" type="button" disabled>Save changes</button>' +
+      '</div>' +
+      '<div class="msg" id="pm-msg" style="margin:10px 0"></div>' +
+      '<div id="pm-host"><div class="panel state">Loading…</div></div>';
+
+    $("pm-save").addEventListener("click", save);
+    $("pm-reset").addEventListener("click", function () { pending = {}; paint(); });
+
+    function key(roleId, menuId) { return roleId + "|" + menuId; }
+
+    function levelOf(roleId, menuId) {
+      var k = key(roleId, menuId);
+      if (pending[k] !== undefined) return pending[k];
+      return current[k] !== undefined ? current[k] : "none";
+    }
+
+    function dirtyCount() { return Object.keys(pending).length; }
+
+    function paint() {
+      var host2 = $("pm-host");
+      if (!roles.length) {
+        host2.innerHTML = '<div class="panel state">No roles yet — add them in ' +
+          '<b>Masters &rsaquo; Role</b> first, then set their rights here.</div>';
+        return;
+      }
+
+      var head = '<thead><tr><th class="page-col">Page</th>' +
+        '<th>Superadmin ' + LOCK + '</th>' +
+        roles.map(function (r) {
+          return '<th>' + esc(r.name) + (r.is_admin ? " " + LOCK : "") + '</th>';
+        }).join("") + '</tr></thead>';
+
+      var body = "";
+      GROUP_ORDER.forEach(function (g) {
+        var items = MENUS.filter(function (m) { return m.group === g; });
+        if (!items.length) return;
+        body += '<tr class="group-row"><td colspan="' + (roles.length + 2) + '">' + esc(g) + '</td></tr>';
+        items.forEach(function (m) {
+          body += '<tr><td class="page-col">' + m.label + '</td>' +
+            '<td class="locked-col">' + TICK + '</td>' +
+            roles.map(function (r) {
+              if (r.is_admin) return '<td class="locked-col">' + TICK + '</td>';
+              var lvl = levelOf(r.id, m.id);
+              var isDirty = pending[key(r.id, m.id)] !== undefined;
+              return '<td><select class="cell' + (isDirty ? " dirty" : "") + '" data-level="' + lvl + '" ' +
+                'data-role="' + r.id + '" data-menu="' + m.id + '">' +
+                ACCESS_LEVELS.map(function (a) {
+                  return '<option value="' + a.v + '"' + (a.v === lvl ? " selected" : "") + '>' + a.label + '</option>';
+                }).join("") + '</select></td>';
+            }).join("") + '</tr>';
+        });
+      });
+
+      host2.innerHTML = '<div class="matrix-wrap"><table class="matrix">' + head +
+        '<tbody>' + body + '</tbody></table></div>' +
+        '<div class="legend">' +
+          '<span class="key">No access</span> — the menu is hidden &nbsp;·&nbsp; ' +
+          '<span class="key">View \u2013 Own</span> — read only, their own records and anyone reporting to them &nbsp;·&nbsp; ' +
+          '<span class="key">View \u2013 All</span> — read every record<br>' +
+          '<span class="key">Edit \u2013 Own</span> — view and change their own and their team\u2019s &nbsp;·&nbsp; ' +
+          '<span class="key">Edit \u2013 All</span> — view and change everything &nbsp;·&nbsp; ' +
+          '<span class="key">' + TICK + '</span> always on, cannot be changed<br>' +
+          'On masters, <b>Own</b> means rows the user created or rows at their own unit. ' +
+          'A role with no row set behaves as readable, so a half-filled matrix never locks anyone out. ' +
+          '<b>Everyone always sees their own records</b>, whatever this says. ' +
+          'Delete is manager-and-above and is deliberately not part of this matrix.' +
+        '</div>';
+
+      host2.querySelectorAll("select.cell").forEach(function (sel) {
+        sel.addEventListener("change", function () {
+          var k = key(sel.dataset.role, sel.dataset.menu);
+          var was = current[k] !== undefined ? current[k] : "none";
+          if (sel.value === was) delete pending[k]; else pending[k] = sel.value;
+          sel.dataset.level = sel.value;
+          sel.classList.toggle("dirty", pending[k] !== undefined);
+          refreshButtons();
+        });
+      });
+      refreshButtons();
+    }
+
+    function refreshButtons() {
+      var n = dirtyCount();
+      $("pm-save").disabled = n === 0;
+      $("pm-reset").disabled = n === 0;
+      $("pm-save").textContent = n ? "Save " + n + " change" + (n === 1 ? "" : "s") : "Save changes";
+    }
+
+    async function load() {
+      var rr = await sb.from("roles").select("*").eq("active", true).order("role_code");
+      if (rr.error) {
+        $("pm-host").innerHTML = '<div class="panel state">Could not load roles — ' + esc(rr.error.message) + '</div>';
+        return;
+      }
+      roles = rr.data || [];
+
+      var pr = await sb.from("role_permissions").select("role_id, menu_id, access");
+      current = {};
+      if (!pr.error && pr.data) {
+        pr.data.forEach(function (x) { current[key(x.role_id, x.menu_id)] = x.access; });
+      }
+      pending = {};
+      paint();
+    }
+
+    async function save() {
+      var rows = Object.keys(pending).map(function (k) {
+        var parts = k.split("|");
+        return { role_id: parts[0], menu_id: parts[1], access: pending[k], updated_by: me.id };
+      });
+      if (!rows.length) return;
+      $("pm-save").disabled = true;
+      setMsg($("pm-msg"), "Saving " + rows.length + "…", true);
+      var r = await sb.from("role_permissions").upsert(rows, { onConflict: "role_id,menu_id" });
+      if (r.error) { $("pm-save").disabled = false; setMsg($("pm-msg"), saveError(r.error)); return; }
+      rows.forEach(function (x) { current[key(x.role_id, x.menu_id)] = x.access; });
+      pending = {};
+      paint();
+      setMsg($("pm-msg"), "Saved. Each user picks this up next time they sign in or reload.", true);
     }
 
     load();
