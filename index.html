@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.5.0",
+    version: "0.6.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -298,6 +298,18 @@
   .modal-head h3 { font-family: var(--serif); font-size: 19px; font-weight: 700; color: var(--ink); }
   .form-grid { display: flex; flex-direction: column; gap: 13px; }
   .form-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+  .form-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
+  .time-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .sec-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .sec-note b { color: var(--ink); font-weight: 600; }
+  .count-badge {
+    display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+    padding: 2px 8px; border-radius: 999px; background: #f0f2f7; color: var(--muted);
+    font-size: 11px; font-weight: 600; vertical-align: middle;
+  }
+  @media (max-width: 560px) {
+    .form-2, .form-3 { grid-template-columns: 1fr; }
+  }
   textarea.txt { resize: vertical; min-height: 64px; font-family: inherit; }
   .modal-acts { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
   .sec {
@@ -530,7 +542,8 @@
       render: function (h) { simpleMaster(h, DEPARTMENTS_M); } },
     { group: "Masters", id: "designations",    label: "Designation",     desc: "Job titles",             icon: "badge",
       render: function (h) { simpleMaster(h, DESIGNATIONS_M); } },
-    { group: "Masters", id: "shifts",          label: "Shift",           desc: "Timings &amp; week offs",    icon: "clock" },
+    { group: "Masters", id: "shifts",          label: "Schedule",        desc: "Timings, breaks &amp; permission", icon: "clock",
+      render: function (h) { renderSchedules(h); } },
     { group: "Masters", id: "holidays",        label: "Holiday",         desc: "Holiday calendar",       icon: "star" },
     { group: "Masters", id: "leave_types",     label: "Leave Type",      desc: "Quotas &amp; rules",         icon: "list" },
     { group: "Masters", id: "roles",           label: "Role",            desc: "Login roles",            icon: "key" },
@@ -1036,6 +1049,367 @@
         setMsg($("sm-imsg"), "Importing " + pending.length + "…", true);
         var r = await sb.from(cfg.table).insert(pending);
         if (r.error) { $("sm-igo").disabled = false; setMsg($("sm-imsg"), saveError(r.error)); return; }
+        closeModal();
+        load();
+      });
+    }
+
+    load();
+  }
+
+  // ---------- Schedule master ----------
+  // Stored in team2.shifts — the table keeps its name because profiles.shift_id,
+  // team2.sync_attendance_day() and role_permissions.menu_id = 'shifts' key on it.
+  function hm(t) { return t ? String(t).slice(0, 5) : ""; }
+
+  function schedRange(a, b) {
+    return (hm(a) && hm(b)) ? hm(a) + "\u2013" + hm(b) : "";
+  }
+
+  function schedSummary(r) {
+    var bits = [];
+    bits.push(schedRange(r.start_time, r.end_time) || "no timing set");
+    if (r.lunch_min) {
+      bits.push("lunch " + r.lunch_min + "m" +
+                (r.lunch_from ? " (" + schedRange(r.lunch_from, r.lunch_to) + ")" : ""));
+    }
+    var teas = [r.tea1_min, r.tea2_min, r.tea3_min].filter(function (x) { return x > 0; });
+    if (teas.length) bits.push("tea " + teas.join("+") + "m");
+    bits.push("perm " + Number(r.permission_hours) + "h/mo");
+    return bits.join(" \u00b7 ");
+  }
+
+  // "9:00", "09:00", "09:00:00" -> "09:00"; anything else -> null.
+  function toTime(v) {
+    var m = /^\s*(\d{1,2}):(\d{2})(?::\d{2})?\s*$/.exec(String(v == null ? "" : v));
+    if (!m) return null;
+    var h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+    if (h > 23 || mi > 59) return null;
+    return (h < 10 ? "0" + h : h) + ":" + m[2];
+  }
+
+  var SCHED_FIELDS = ["tea1_from", "tea1_to", "tea1_min", "tea2_from", "tea2_to", "tea2_min",
+                      "tea3_from", "tea3_to", "tea3_min", "lunch_from", "lunch_to", "lunch_min"];
+
+  function renderSchedules(host) {
+    var mayEdit = canEditMenu("shifts");
+    var rows = [], counts = {};
+
+    host.innerHTML =
+      '<div class="panel toolbar">' +
+        '<input class="txt search" id="sc-search" type="search" placeholder="Search schedules by name…">' +
+        '<label class="chk"><input type="checkbox" id="sc-inuse"> In use only</label>' +
+        '<button class="mini" id="sc-export" type="button">Export</button>' +
+        (mayEdit ? '<button class="mini" id="sc-tpl" type="button">Template</button>' : '') +
+        (mayEdit ? '<button class="mini" id="sc-import" type="button">Import</button>' : '') +
+        (mayEdit ? '<button class="go compact" id="sc-add" type="button">New schedule</button>' : '') +
+      '</div>' +
+      '<div class="rows" id="sc-rows"><div class="panel state">Loading…</div></div>';
+
+    $("sc-search").addEventListener("input", paint);
+    $("sc-inuse").addEventListener("change", paint);
+    $("sc-export").addEventListener("click", exportCsv);
+    if (mayEdit) {
+      $("sc-add").addEventListener("click", function () { form(null); });
+      $("sc-tpl").addEventListener("click", template);
+      $("sc-import").addEventListener("click", importDialog);
+    }
+
+    function visible() {
+      var q = $("sc-search").value.trim().toLowerCase();
+      var inUse = $("sc-inuse").checked;
+      return rows.filter(function (r) {
+        if (inUse && !(counts[r.id] > 0)) return false;
+        return !q || r.name.toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
+    function paint() {
+      var list = visible();
+      var host2 = $("sc-rows");
+      if (!list.length) {
+        host2.innerHTML = '<div class="panel state">' +
+          (rows.length ? "No schedule matches that."
+                       : "No schedules yet." + (mayEdit ? " Use <b>New schedule</b> or <b>Import</b>." : "")) +
+          '</div>';
+        return;
+      }
+      host2.innerHTML = list.map(function (r) {
+        var n = counts[r.id] || 0;
+        return '<div class="row-card">' +
+          '<div class="row-main">' +
+            '<span class="row-name">' + esc(r.name) +
+              '<span class="count-badge" title="Staff on this schedule">' +
+                svg("users", 12) + n + '</span>' +
+            '</span>' +
+            '<span class="row-meta">' + esc(schedSummary(r)) + '</span>' +
+          '</div>' +
+          '<div class="row-acts">' +
+            '<span class="pill ' + (r.active ? "on" : "off") + '">' + (r.active ? "Active" : "Inactive") + '</span>' +
+            (mayEdit ? '<button class="mini" data-edit="' + r.id + '" type="button">Edit</button>' +
+                       '<button class="mini danger" data-del="' + r.id + '" type="button">Delete</button>' : '') +
+          '</div></div>';
+      }).join("");
+
+      host2.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          form(rows.filter(function (r) { return r.id === b.dataset.edit; })[0]);
+        });
+      });
+      host2.querySelectorAll("[data-del]").forEach(function (b) {
+        b.addEventListener("click", function () { remove(b.dataset.del); });
+      });
+    }
+
+    async function load() {
+      var r = await sb.from("shifts").select("*").order("name");
+      if (r.error) {
+        $("sc-rows").innerHTML = '<div class="panel state">Could not load — ' + esc(r.error.message) + '</div>';
+        return;
+      }
+      rows = r.data || [];
+      counts = {};
+      var pr = await sb.from("profiles").select("shift_id");
+      if (!pr.error && pr.data) {
+        pr.data.forEach(function (x) {
+          if (x.shift_id) counts[x.shift_id] = (counts[x.shift_id] || 0) + 1;
+        });
+      }
+      paint();
+    }
+
+    async function remove(id) {
+      var r0 = rows.filter(function (x) { return x.id === id; })[0];
+      if (!r0) return;
+      var n = counts[id] || 0;
+      var warn = n
+        ? '"' + r0.name + '" is used by ' + n + ' staff. Deleting it leaves them with no schedule. Continue?'
+        : 'Delete "' + r0.name + '"? This cannot be undone.';
+      if (!window.confirm(warn)) return;
+      var r = await sb.from("shifts").delete().eq("id", id);
+      if (r.error) { window.alert(saveError(r.error)); return; }
+      load();
+    }
+
+    function csvRows(list) {
+      return [["name", "check_in", "check_out",
+               "tea1_from", "tea1_to", "tea1_min",
+               "tea2_from", "tea2_to", "tea2_min",
+               "tea3_from", "tea3_to", "tea3_min",
+               "lunch_from", "lunch_to", "lunch_min",
+               "permission_hours", "active"]].concat(list.map(function (r) {
+        return [r.name, hm(r.start_time), hm(r.end_time),
+                hm(r.tea1_from), hm(r.tea1_to), r.tea1_min,
+                hm(r.tea2_from), hm(r.tea2_to), r.tea2_min,
+                hm(r.tea3_from), hm(r.tea3_to), r.tea3_min,
+                hm(r.lunch_from), hm(r.lunch_to), r.lunch_min,
+                Number(r.permission_hours), r.active ? "yes" : "no"];
+      }));
+    }
+
+    function exportCsv() { download("schedules-" + today() + ".csv", toCsv(csvRows(visible()))); }
+
+    function template() {
+      download("schedules-import-template.csv", toCsv(csvRows([{
+        name: "Factory Staff", start_time: "09:00", end_time: "20:00",
+        tea1_from: "10:00", tea1_to: "12:00", tea1_min: 15,
+        tea2_from: "15:00", tea2_to: "18:00", tea2_min: 15,
+        tea3_from: "18:00", tea3_to: "20:00", tea3_min: 15,
+        lunch_from: "12:30", lunch_to: "15:00", lunch_min: 45,
+        permission_hours: 3, active: true
+      }])));
+    }
+
+    function importDialog() {
+      openModal("Import schedules",
+        '<div class="form-grid">' +
+          '<p class="hint">The file needs a <b>name</b> column; times are <b>HH:MM</b> ' +
+            '(24-hour) and blanks are allowed. Names that already exist are skipped. ' +
+            'Use <b>Template</b> on the toolbar for the exact columns.</p>' +
+          '<input class="txt" id="sc-file" type="file" accept=".csv,text/csv">' +
+          '<div id="sc-preview"></div>' +
+          '<div class="msg" id="sc-imsg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="sc-icancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="sc-igo" type="button" disabled>Import</button>' +
+          '</div>' +
+        '</div>');
+
+      var pending = [];
+      $("sc-icancel").addEventListener("click", closeModal);
+      $("sc-file").addEventListener("change", function () {
+        var f = this.files && this.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var grid = parseCsv(String(reader.result));
+          if (!grid.length) { setMsg($("sc-imsg"), "That file is empty"); return; }
+          var head = grid[0].map(function (h) { return h.trim().toLowerCase(); });
+          var iName = head.indexOf("name");
+          if (iName === -1) { setMsg($("sc-imsg"), 'No "name" column in that file'); return; }
+          var col = function (r, key) { var i = head.indexOf(key); return i === -1 ? "" : (r[i] || ""); };
+
+          var existing = {}, seen = {}, dup = 0, blank = 0;
+          rows.forEach(function (r) { existing[r.name.toLowerCase()] = true; });
+          pending = [];
+          grid.slice(1).forEach(function (r) {
+            var name = (r[iName] || "").trim();
+            if (!name) { blank++; return; }
+            var key = name.toLowerCase();
+            if (existing[key] || seen[key]) { dup++; return; }
+            seen[key] = true;
+            var row = {
+              name: name,
+              start_time: toTime(col(r, "check_in")),
+              end_time: toTime(col(r, "check_out")),
+              permission_hours: parseFloat(col(r, "permission_hours")) || 0,
+              active: head.indexOf("active") === -1 ? true : truthy(col(r, "active")),
+              created_by: me.id
+            };
+            SCHED_FIELDS.forEach(function (k) {
+              row[k] = /_min$/.test(k) ? (parseInt(col(r, k), 10) || 0) : toTime(col(r, k));
+            });
+            pending.push(row);
+          });
+
+          $("sc-preview").innerHTML = '<div class="panel state" style="padding:14px">' +
+            '<b>' + pending.length + '</b> to import' +
+            (dup ? ' · ' + dup + ' skipped (already exist or repeated)' : '') +
+            (blank ? ' · ' + blank + ' blank rows ignored' : '') +
+            (pending.length ? '<br><span class="hint">' +
+              esc(pending.slice(0, 5).map(function (x) { return x.name; }).join(", ")) +
+              (pending.length > 5 ? ", …" : "") + '</span>' : '') +
+            '</div>';
+          setMsg($("sc-imsg"), "");
+          $("sc-igo").disabled = pending.length === 0;
+        };
+        reader.readAsText(f);
+      });
+
+      $("sc-igo").addEventListener("click", async function () {
+        if (!pending.length) return;
+        $("sc-igo").disabled = true;
+        setMsg($("sc-imsg"), "Importing " + pending.length + "…", true);
+        var r = await sb.from("shifts").insert(pending);
+        if (r.error) { $("sc-igo").disabled = false; setMsg($("sc-imsg"), saveError(r.error)); return; }
+        closeModal();
+        load();
+      });
+    }
+
+    // ---------- New / edit schedule ----------
+    function form(row) {
+      var n = row ? (counts[row.id] || 0) : 0;
+      var teaBlock = function (i, label) {
+        return '<div class="field">' +
+          '<label for="sc-t' + i + 'f">' + label + '</label>' +
+          '<div class="time-2">' +
+            '<input class="txt" id="sc-t' + i + 'f" type="time">' +
+            '<input class="txt" id="sc-t' + i + 't" type="time">' +
+          '</div>' +
+          '<input class="txt" id="sc-t' + i + 'm" type="number" min="0" max="240" step="5" placeholder="minutes">' +
+        '</div>';
+      };
+
+      openModal(row ? "Edit schedule" : "New schedule",
+        '<div class="form-grid">' +
+          '<div class="field"><label for="sc-name">Schedule name *</label>' +
+            '<input class="txt" id="sc-name" type="text" placeholder="e.g. Factory Staff" autocomplete="off"></div>' +
+
+          '<div class="form-2">' +
+            '<div class="field"><label for="sc-in">Day check-in</label>' +
+              '<input class="txt" id="sc-in" type="time"></div>' +
+            '<div class="field"><label for="sc-out">Day check-out</label>' +
+              '<input class="txt" id="sc-out" type="time"></div>' +
+          '</div>' +
+
+          '<div class="sec">' +
+            '<span class="sec-title">Tea breaks</span>' +
+            '<div class="form-3">' +
+              teaBlock(1, "Morning tea") + teaBlock(2, "Afternoon tea") + teaBlock(3, "Evening tea") +
+            '</div>' +
+            '<span class="sec-note">Each pair is the window the break may be taken in; ' +
+              'the box below it is how many minutes it lasts.</span>' +
+          '</div>' +
+
+          '<div class="sec">' +
+            '<span class="sec-title">Lunch &amp; permission</span>' +
+            '<div class="form-2">' +
+              '<div class="field"><label for="sc-lf">Lunch window</label>' +
+                '<div class="time-2">' +
+                  '<input class="txt" id="sc-lf" type="time"><input class="txt" id="sc-lt" type="time">' +
+                '</div>' +
+                '<input class="txt" id="sc-lm" type="number" min="0" max="480" step="5" placeholder="minutes">' +
+              '</div>' +
+              '<div class="field"><label for="sc-perm">Permission (hours / 26-day month)</label>' +
+                '<input class="txt" id="sc-perm" type="number" min="0" max="100" step="0.5"></div>' +
+            '</div>' +
+          '</div>' +
+
+          '<label class="chk"><input type="checkbox" id="sc-active" checked> Active</label>' +
+          '<div class="msg" id="sc-msg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="sc-cancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="sc-save" type="button">' +
+              (row ? "Update &amp; propagate" : "Create schedule") + '</button>' +
+          '</div>' +
+          (row ? '<span class="sec-note">Staff link to this schedule, so saving applies to ' +
+                 '<b>all ' + n + ' staff currently assigned</b> — there is no per-person copy to update.</span>'
+               : '') +
+        '</div>');
+
+      $("sc-name").value = row ? row.name : "";
+      $("sc-in").value   = row ? hm(row.start_time) : "";
+      $("sc-out").value  = row ? hm(row.end_time) : "";
+      [1, 2, 3].forEach(function (i) {
+        $("sc-t" + i + "f").value = row ? hm(row["tea" + i + "_from"]) : "";
+        $("sc-t" + i + "t").value = row ? hm(row["tea" + i + "_to"]) : "";
+        $("sc-t" + i + "m").value = row ? (row["tea" + i + "_min"] || 0) : 15;
+      });
+      $("sc-lf").value = row ? hm(row.lunch_from) : "";
+      $("sc-lt").value = row ? hm(row.lunch_to) : "";
+      $("sc-lm").value = row ? (row.lunch_min || 0) : 45;
+      $("sc-perm").value = row ? Number(row.permission_hours) : 3;
+      $("sc-active").checked = row ? !!row.active : true;
+
+      $("sc-cancel").addEventListener("click", closeModal);
+      $("sc-name").focus();
+
+      $("sc-save").addEventListener("click", async function () {
+        var name = $("sc-name").value.trim();
+        var msg = $("sc-msg");
+        if (!name) { setMsg(msg, "Enter the schedule name"); return; }
+        if (!$("sc-in").value || !$("sc-out").value) {
+          setMsg(msg, "Set day check-in and check-out"); return;
+        }
+        var clash = rows.some(function (r) {
+          return r.name.toLowerCase() === name.toLowerCase() && (!row || r.id !== row.id);
+        });
+        if (clash) { setMsg(msg, "A schedule with that name already exists"); return; }
+
+        var payload = {
+          name: name,
+          start_time: $("sc-in").value,
+          end_time: $("sc-out").value,
+          lunch_from: $("sc-lf").value || null,
+          lunch_to: $("sc-lt").value || null,
+          lunch_min: parseInt($("sc-lm").value, 10) || 0,
+          permission_hours: parseFloat($("sc-perm").value) || 0,
+          active: $("sc-active").checked
+        };
+        [1, 2, 3].forEach(function (i) {
+          payload["tea" + i + "_from"] = $("sc-t" + i + "f").value || null;
+          payload["tea" + i + "_to"]   = $("sc-t" + i + "t").value || null;
+          payload["tea" + i + "_min"]  = parseInt($("sc-t" + i + "m").value, 10) || 0;
+        });
+
+        $("sc-save").disabled = true;
+        setMsg(msg, "Saving…", true);
+        var r = row
+          ? await sb.from("shifts").update(payload).eq("id", row.id)
+          : await sb.from("shifts").insert(Object.assign({ created_by: me.id }, payload));
+        $("sc-save").disabled = false;
+        if (r.error) { setMsg(msg, saveError(r.error)); return; }
         closeModal();
         load();
       });

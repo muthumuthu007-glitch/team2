@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.5.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.6.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -61,6 +61,7 @@ set in type (Calibri) — swap in the real logo file when there is one.
 | **Unit** | Name, address (Google Places search), city, pincode, active. Geofence is a **circle** (drag it, or set a radius) or a **polygon** you draw by clicking corners on the map, plus a **buffer** in metres. Stored in `team2.locations`. |
 | **Department** | Name + active, with **Export**, **Import** and a downloadable import template. |
 | **Designation** | Same screen as Department, different table. |
+| **Schedule** | Was "Shift". Name, day check-in/out, three tea breaks (window + minutes), lunch (window + minutes) and permission hours per 26-day month. Shows how many staff are on each schedule, with an **In use only** filter, plus Export / Template / Import. Stored in `team2.shifts`. |
 
 Department and Designation share one `simpleMaster(host, cfg)` function — another
 name-only master is a config plus a table, not new screen code. Import matches on
@@ -82,7 +83,7 @@ the behaviour for that menu is described. The 22 menus are:
 |---|---|
 | Daily | Punch In/Out · My Attendance · Visits · Live Tracking |
 | Requests | Leave · Permission · Regularisation · Approvals |
-| Masters | Customer/Site · Visit Purpose · Location · Department · Designation · Shift · Holiday · Leave Type · Role |
+| Masters | Customer/Site · Visit Purpose · **Unit** · **Department** · **Designation** · **Schedule** · Holiday · Leave Type · Role |
 | Reports | Reports · Travel/Distance |
 | Admin | User Master · Permissions · Settings |
 
@@ -127,6 +128,20 @@ label says "Unit". The geofence columns:
 | `geofence_m` | circle radius in metres |
 | `geofence_polygon` | `jsonb` array of `{"lat":…,"lng":…}`, at least 3, enforced by a check constraint |
 | `geofence_buffer_m` | extra tolerance in metres outside either shape (0–5000) |
+
+### Schedules
+
+`team2.shifts` likewise keeps its name (`profiles.shift_id`, the attendance trigger
+and `menu_id = 'shifts'`). Added for the Schedule screen: `tea1_from/to/min`,
+`tea2_*`, `tea3_*`, `lunch_from/to/min` and `permission_hours` (per 26-day month).
+
+Staff **link** to a schedule by `profiles.shift_id`; there is no per-person copy, so
+editing a schedule applies to everyone on it immediately. The button says
+"Update & propagate" to match the agreed design, but nothing is copied.
+
+**Not in the form yet:** `week_offs`, `grace_in_min`, `grace_out_min`,
+`half_day_min`, `full_day_min`, `night_shift`. They keep their defaults and the
+attendance trigger still uses grace/half/full — say the word to expose them.
 
 ### Things worth knowing
 
