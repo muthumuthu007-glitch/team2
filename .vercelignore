@@ -4,3 +4,7 @@ README.md
 .claude
 .env*
 .vercel
+supabase
+_*
+*.xlsx
+*.xls

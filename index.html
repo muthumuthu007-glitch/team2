@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.8",
+    version: "0.9.9",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -624,7 +624,8 @@
     { group: "Requests", id: "approvals",           label: "Approvals",      desc: "Act on your team's requests", icon: "check",
       roles: ["superadmin", "admin", "manager"] },
 
-    { group: "Masters", id: "parties",         label: "Customer / Site", desc: "Who the team visits",    icon: "building" },
+    { group: "Masters", id: "parties",         label: "Supplier",        desc: "Suppliers the team visits", icon: "building",
+      render: function (h) { renderSuppliers(h); } },
     { group: "Masters", id: "visit_purposes",  label: "Visit Purpose",   desc: "Reasons for a visit",    icon: "tag",
       render: function (h) { simpleMaster(h, VISIT_PURPOSES_M); } },
     { group: "Masters", id: "locations",       label: "Unit",            desc: "Units, addresses &amp; geofences", icon: "map",
@@ -938,6 +939,318 @@
     }
     if (err.code === "23505") return "That code or name already exists";
     return err.message || "Could not save";
+  }
+
+  // ---------- Excel (SheetJS), loaded only when needed ----------
+  // SheetJS's own CDN at 0.20.3: the npm build is stuck at 0.18.5, which has a
+  // known file-parsing vulnerability. Pinned with an integrity hash.
+  var xlsxLoading = null;
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxLoading) return xlsxLoading;
+    xlsxLoading = new Promise(function (resolve, reject) {
+      var sc = document.createElement("script");
+      sc.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+      sc.integrity = "sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT";
+      sc.crossOrigin = "anonymous";
+      sc.onload = function () { resolve(window.XLSX); };
+      sc.onerror = function () { xlsxLoading = null; reject(new Error("Could not load the Excel reader")); };
+      document.head.appendChild(sc);
+    });
+    return xlsxLoading;
+  }
+
+  // ---------- Supplier master (team2.parties) ----------
+  // Upload format = the company's supplier list: columns "Supplier Name",
+  // "Address", "Phone No". Phones stay text exactly as written (many are
+  // "99443 49654" or landlines like "0421-2245213"); names are kept whole,
+  // including any GST number on the end.
+  var SUPPLIER_COLS = ["Supplier Name", "Address", "Phone No"];
+  var SUPPLIER_SHOW = 300;
+
+  function renderSuppliers(host) {
+    var mayEdit = canEditMenu("parties");
+    var rows = [], byId = {};
+
+    host.innerHTML =
+      '<div class="panel toolbar">' +
+        '<input class="txt search" id="sp-search" type="search" placeholder="Search supplier, address, phone or code…">' +
+        '<label class="chk"><input type="checkbox" id="sp-inactive"> Show inactive</label>' +
+        '<button class="mini" id="sp-export" type="button">Export</button>' +
+        (mayEdit ? '<button class="mini" id="sp-tpl" type="button">Template</button>' : '') +
+        (mayEdit ? '<button class="mini" id="sp-import" type="button">Upload list</button>' : '') +
+        (mayEdit ? '<button class="go compact" id="sp-add" type="button">Add supplier</button>' : '') +
+        '<span class="result-count" id="sp-count"></span>' +
+      '</div>' +
+      '<div class="msg" id="sp-msg" style="margin:10px 0"></div>' +
+      '<div id="sp-host"><div class="panel state">Loading…</div></div>';
+
+    $("sp-search").addEventListener("input", paint);
+    $("sp-inactive").addEventListener("change", paint);
+    $("sp-export").addEventListener("click", function () { exportXlsx(visible(), "suppliers-" + today() + ".xlsx"); });
+    if (mayEdit) {
+      $("sp-add").addEventListener("click", function () { form(null); });
+      $("sp-tpl").addEventListener("click", function () {
+        exportXlsx([{ name: "EXAMPLE TRADERS - 33ABCDE1234F1Z5", address: "12, Main Road, Tirupur 641604", phone: "99443 49654" }],
+                   "supplier-upload-template.xlsx");
+      });
+      $("sp-import").addEventListener("click", importDialog);
+    }
+
+    function visible() {
+      var q = $("sp-search").value.trim().toLowerCase();
+      var showOff = $("sp-inactive").checked;
+      return rows.filter(function (r) {
+        if (!r.active && !showOff) return false;
+        if (!q) return true;
+        return [r.name, r.address, r.phone, r.party_code].join(" ").toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
+    function paint() {
+      var list = visible();
+      $("sp-count").textContent = list.length + " of " + rows.length + " suppliers";
+      var host2 = $("sp-host");
+      if (!list.length) {
+        host2.innerHTML = '<div class="panel state">' +
+          (rows.length ? "No supplier matches that search."
+                       : "No suppliers yet." + (mayEdit ? " Use <b>Upload list</b> to load your supplier sheet." : "")) +
+          '</div>';
+        return;
+      }
+      var shown = list.slice(0, SUPPLIER_SHOW);
+      host2.innerHTML = '<div class="matrix-wrap"><table class="matrix"><thead><tr>' +
+          '<th>Code</th><th class="page-col">Supplier name</th><th>Address</th><th>Phone no</th><th>Status</th>' +
+          (mayEdit ? '<th>Actions</th>' : '') + '</tr></thead><tbody>' +
+        shown.map(function (r) {
+          return '<tr><td>' + esc(r.party_code) + '</td>' +
+            '<td class="page-col nm">' + esc(r.name) + '</td>' +
+            '<td style="white-space:normal;min-width:260px">' + esc(r.address || "–") + '</td>' +
+            '<td>' + esc(r.phone || "–") + '</td>' +
+            '<td><span class="pill ' + (r.active ? "on" : "off") + '">' + (r.active ? "Active" : "Inactive") + '</span></td>' +
+            (mayEdit ? '<td style="white-space:nowrap">' +
+              '<button class="act-btn" data-edit="' + r.id + '" title="Edit" type="button">' + svg("edit", 14) + '</button>' +
+              '<button class="act-btn" data-del="' + r.id + '" title="Delete" type="button">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+                'stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3"/></svg>' +
+              '</button></td>' : '') +
+            '</tr>';
+        }).join("") + '</tbody></table></div>' +
+        (list.length > SUPPLIER_SHOW
+          ? '<div class="legend">Showing the first ' + SUPPLIER_SHOW + ' of ' + list.length +
+            ' — type in the search box to narrow it down. Export includes all ' + list.length + '.</div>'
+          : '');
+
+      host2.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.addEventListener("click", function () { form(byId[b.dataset.edit]); });
+      });
+      host2.querySelectorAll("[data-del]").forEach(function (b) {
+        b.addEventListener("click", function () { remove(byId[b.dataset.del]); });
+      });
+    }
+
+    // Paged, so a list longer than the API's row cap still loads completely.
+    async function load() {
+      var all = [], from = 0, size = 1000;
+      for (;;) {
+        var r = await sb.from("parties").select("id, party_code, name, address, phone, active, party_type")
+          .order("name").range(from, from + size - 1);
+        if (r.error) {
+          $("sp-host").innerHTML = '<div class="panel state">Could not load suppliers — ' + esc(r.error.message) + '</div>';
+          return;
+        }
+        all = all.concat(r.data || []);
+        if (!r.data || r.data.length < size) break;
+        from += size;
+      }
+      rows = all;
+      byId = {};
+      rows.forEach(function (x) { byId[x.id] = x; });
+      paint();
+    }
+
+    async function remove(r0) {
+      if (!r0) return;
+      if (!window.confirm('Delete supplier "' + r0.name + '"? This cannot be undone.')) return;
+      var r = await sb.from("parties").delete().eq("id", r0.id);
+      if (r.error) { setMsg($("sp-msg"), saveError(r.error)); return; }
+      setMsg($("sp-msg"), "Deleted " + r0.name, true);
+      load();
+    }
+
+    function form(r0) {
+      openModal(r0 ? "Edit supplier" : "Add supplier",
+        '<div class="form-grid">' +
+          '<div class="field"><label for="sp-name">Supplier name *</label>' +
+            '<input class="txt" id="sp-name" type="text" autocomplete="off" placeholder="e.g. VIHAAN TRADERS"></div>' +
+          '<div class="field"><label for="sp-addr">Address</label>' +
+            '<textarea class="txt" id="sp-addr" rows="3"></textarea></div>' +
+          '<div class="field"><label for="sp-phone">Phone no</label>' +
+            '<input class="txt" id="sp-phone" type="text" autocomplete="off" placeholder="e.g. 99443 49654 or 0421-2245213"></div>' +
+          '<label class="chk"><input type="checkbox" id="sp-active" checked> Active</label>' +
+          '<div class="msg" id="sp-fmsg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="sp-cancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="sp-save" type="button">Save supplier</button>' +
+          '</div>' +
+        '</div>');
+      $("sp-name").value = r0 ? r0.name : "";
+      $("sp-addr").value = r0 ? (r0.address || "") : "";
+      $("sp-phone").value = r0 ? (r0.phone || "") : "";
+      $("sp-active").checked = r0 ? !!r0.active : true;
+      $("sp-cancel").addEventListener("click", closeModal);
+      $("sp-name").focus();
+
+      $("sp-save").addEventListener("click", async function () {
+        var name = $("sp-name").value.trim();
+        if (!name) { setMsg($("sp-fmsg"), "Enter the supplier name"); return; }
+        var clash = rows.some(function (x) {
+          return x.name.trim().toLowerCase() === name.toLowerCase() && (!r0 || x.id !== r0.id);
+        });
+        if (clash) { setMsg($("sp-fmsg"), "A supplier with that name already exists"); return; }
+        var payload = {
+          name: name,
+          address: $("sp-addr").value.trim() || null,
+          phone: $("sp-phone").value.trim() || null,
+          active: $("sp-active").checked
+        };
+        $("sp-save").disabled = true;
+        setMsg($("sp-fmsg"), "Saving…", true);
+        var r = r0
+          ? await sb.from("parties").update(payload).eq("id", r0.id)
+          : await sb.from("parties").insert(Object.assign({ party_type: "supplier", created_by: me.id }, payload));
+        $("sp-save").disabled = false;
+        if (r.error) { setMsg($("sp-fmsg"), saveError(r.error)); return; }
+        closeModal();
+        load();
+      });
+    }
+
+    // Same layout as the uploaded sheet, so an export can be edited and re-uploaded.
+    async function exportXlsx(list, filename) {
+      try {
+        var X = await loadXlsx();
+        var aoa = [SUPPLIER_COLS].concat(list.map(function (r) {
+          return [r.name || "", r.address || "", r.phone || ""];
+        }));
+        var ws = X.utils.aoa_to_sheet(aoa);
+        ws["!cols"] = [{ wch: 40 }, { wch: 70 }, { wch: 18 }];
+        var wb = X.utils.book_new();
+        X.utils.book_append_sheet(wb, ws, "PARTY");
+        X.writeFile(wb, filename);
+      } catch (e) {
+        setMsg($("sp-msg"), e.message || "Could not create the Excel file");
+      }
+    }
+
+    function importDialog() {
+      openModal("Upload supplier list",
+        '<div class="form-grid">' +
+          '<p class="hint">Upload the supplier sheet as it is — <b>.xlsx</b>, <b>.xls</b> or <b>.csv</b>. ' +
+            'The first sheet is read; it needs a <b>Supplier Name</b> column, and <b>Address</b> and ' +
+            '<b>Phone No</b> are picked up when present. Suppliers whose name already exists are ' +
+            'skipped, so the same file can be uploaded again safely. Use <b>Template</b> for the layout.</p>' +
+          '<input class="txt" id="sp-file" type="file" accept=".xlsx,.xls,.csv">' +
+          '<div id="sp-preview"></div>' +
+          '<div class="msg" id="sp-imsg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="sp-icancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="sp-igo" type="button" disabled>Import</button>' +
+          '</div>' +
+        '</div>');
+
+      var pending = [];
+      $("sp-icancel").addEventListener("click", closeModal);
+
+      $("sp-file").addEventListener("change", async function () {
+        var f = this.files && this.files[0];
+        if (!f) return;
+        setMsg($("sp-imsg"), "Reading " + f.name + "…", true);
+        $("sp-igo").disabled = true;
+        var grid;
+        try {
+          var X = await loadXlsx();
+          var buf = await f.arrayBuffer();
+          var wb = X.read(buf, { type: "array" });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          // raw:false keeps phones exactly as displayed ("99443 49654", not a number).
+          grid = X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "", blankrows: false });
+        } catch (e) {
+          setMsg($("sp-imsg"), "Could not read that file — " + (e.message || e));
+          return;
+        }
+
+        // The header row is the first row that has a "Supplier Name" cell.
+        var headAt = -1, iName = -1, iAddr = -1, iPhone = -1;
+        for (var i = 0; i < Math.min(grid.length, 15) && headAt === -1; i++) {
+          var h = grid[i].map(function (c) { return String(c).trim().toLowerCase().replace(/\s+/g, " "); });
+          var n = h.indexOf("supplier name");
+          if (n === -1) n = h.indexOf("name");
+          if (n !== -1) {
+            headAt = i; iName = n;
+            iAddr = h.indexOf("address");
+            iPhone = h.findIndex(function (x) { return /^(phone|phone no\.?|mobile|contact no\.?)$/.test(x); });
+          }
+        }
+        if (headAt === -1) { setMsg($("sp-imsg"), 'No "Supplier Name" column found in the first sheet'); return; }
+
+        var existing = {}, seen = {}, dup = 0, repeat = 0, blank = 0, tooLong = 0;
+        rows.forEach(function (x) { existing[x.name.trim().toLowerCase()] = true; });
+        pending = [];
+        grid.slice(headAt + 1).forEach(function (r) {
+          var name = String(r[iName] || "").trim();
+          if (!name) { blank++; return; }
+          var key = name.toLowerCase();
+          if (existing[key]) { dup++; return; }
+          if (seen[key]) { repeat++; return; }
+          seen[key] = true;
+          var addr = iAddr === -1 ? "" : String(r[iAddr] || "").trim();
+          var phone = iPhone === -1 ? "" : String(r[iPhone] || "").trim();
+          if (name.length > 200 || addr.length > 500 || phone.length > 60) { tooLong++; return; }
+          pending.push({
+            name: name, address: addr || null, phone: phone || null,
+            party_type: "supplier", active: true, created_by: me.id
+          });
+        });
+
+        $("sp-preview").innerHTML = '<div class="panel state" style="padding:14px;text-align:left">' +
+          '<b>' + pending.length + '</b> new supplier' + (pending.length === 1 ? "" : "s") + ' to import' +
+          (dup ? '<br>' + dup + ' skipped — already in the list' : '') +
+          (repeat ? '<br>' + repeat + ' skipped — repeated inside the file' : '') +
+          (blank ? '<br>' + blank + ' blank rows ignored' : '') +
+          (tooLong ? '<br>' + tooLong + ' skipped — a value is too long' : '') +
+          (pending.length ? '<br><span class="hint">e.g. ' +
+            esc(pending.slice(0, 3).map(function (x) { return x.name; }).join(" · ")) + '</span>' : '') +
+          '<br><span class="hint">Columns used: Supplier Name' + (iAddr !== -1 ? ", Address" : "") +
+            (iPhone !== -1 ? ", Phone No" : "") + '</span>' +
+          '</div>';
+        setMsg($("sp-imsg"), "");
+        $("sp-igo").disabled = pending.length === 0;
+      });
+
+      $("sp-igo").addEventListener("click", async function () {
+        if (!pending.length) return;
+        $("sp-igo").disabled = true;
+        var done = 0, size = 500;
+        for (var i = 0; i < pending.length; i += size) {
+          var chunk = pending.slice(i, i + size);
+          setMsg($("sp-imsg"), "Importing… " + done + " of " + pending.length, true);
+          var r = await sb.from("parties").insert(chunk);
+          if (r.error) {
+            setMsg($("sp-imsg"), "Stopped after " + done + " of " + pending.length + " — " + saveError(r.error) +
+                   (done ? ". Upload the same file again to add the rest; the ones already in are skipped." : ""));
+            load();
+            return;
+          }
+          done += chunk.length;
+        }
+        closeModal();
+        setMsg($("sp-msg"), "Imported " + done + " supplier" + (done === 1 ? "" : "s"), true);
+        load();
+      });
+    }
+
+    load();
   }
 
   // ---------- Simple name-only masters (Department, Designation) ----------

@@ -1,2 +1,6 @@
 .vercel
 .env*
+# local test files — never commit (may hold company data)
+_*
+*.xlsx
+*.xls
