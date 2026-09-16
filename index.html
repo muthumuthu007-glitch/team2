@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.6",
+    version: "0.9.7",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -2978,25 +2978,27 @@
       if (loading) return loading;
       loading = new Promise(function (resolve, reject) {
         var s = document.createElement("script");
-        s.src = "https://maps.googleapis.com/maps/api/js?key=" +
-                encodeURIComponent(key()) + "&libraries=places&loading=async";
-        s.async = true;
-        // With loading=async the bootstrap defines google.maps but NOT google.maps.Map;
-        // the library has to be imported before anything can be constructed.
-        s.onload = async function () {
-          try {
-            var g = window.google && window.google.maps;
-            if (g && g.importLibrary) {
-              await g.importLibrary("maps");
-              await g.importLibrary("places");
-            }
-            g = window.google && window.google.maps;
-            resolve(g && g.Map ? g : null);
-          } catch (err) {
-            reject(err);
-          }
+        // With loading=async the script's onload fires BEFORE the library is ready —
+        // google.maps.Map and importLibrary are both still undefined at that moment
+        // (verified with the live key). Google calls `callback` once everything,
+        // including the places library, is actually usable.
+        var timer = setTimeout(function () {
+          loading = null;
+          reject(new Error("Google Maps did not finish loading"));
+        }, 20000);
+        window.__team2MapsReady = function () {
+          clearTimeout(timer);
+          var g = window.google && window.google.maps;
+          resolve(g && g.Map ? g : null);
         };
-        s.onerror = function () { reject(new Error("Google Maps failed to load")); };
+        s.src = "https://maps.googleapis.com/maps/api/js?key=" +
+                encodeURIComponent(key()) + "&libraries=places&loading=async&callback=__team2MapsReady";
+        s.async = true;
+        s.onerror = function () {
+          clearTimeout(timer);
+          loading = null;
+          reject(new Error("Google Maps failed to load"));
+        };
         document.head.appendChild(s);
       });
       return loading;
