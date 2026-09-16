@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.3.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.5.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -54,8 +54,29 @@ The role rule is checked only at sign-in; a reload with a live session goes
 straight in. The last tab used is remembered per browser. The Carloo mark is
 set in type (Calibri) — swap in the real logo file when there is one.
 
-**Every menu is an empty placeholder.** They get built one at a time, once the
-behaviour for that menu is described. The 22 menus are:
+**Three masters are built** (v0.4.0 – v0.5.0):
+
+| Menu | What it does |
+|---|---|
+| **Unit** | Name, address (Google Places search), city, pincode, active. Geofence is a **circle** (drag it, or set a radius) or a **polygon** you draw by clicking corners on the map, plus a **buffer** in metres. Stored in `team2.locations`. |
+| **Department** | Name + active, with **Export**, **Import** and a downloadable import template. |
+| **Designation** | Same screen as Department, different table. |
+
+Department and Designation share one `simpleMaster(host, cfg)` function — another
+name-only master is a config plus a table, not new screen code. Import matches on
+**name** (case-insensitive), skips names that already exist or repeat within the
+file, ignores blank rows, and reports the counts before you commit. `code` in an
+imported file is ignored: codes are generated (`DEP-001`, `LOC-001`).
+
+**The Unit map needs a Google Maps key** — see below. Without one the form still
+saves name, address and buffer, and says so instead of showing a broken map.
+
+**Note on `DrawingManager`:** Google removed it from the Maps JS API in 3.65, so
+the polygon is drawn by hand — map clicks push vertices onto an editable
+`Polygon`, with Undo point and Clear. Don't reintroduce `DrawingManager`.
+
+**The remaining menus are empty placeholders.** They get built one at a time, once
+the behaviour for that menu is described. The 22 menus are:
 
 | Group | Menus |
 |---|---|
@@ -92,6 +113,20 @@ row per employee per day), `regularisations` (fix a missed punch)
 
 **Config** — `app_settings` (tracking interval, geofence default, permission caps,
 selfie-on-punch, week start)
+
+### Unit geofences
+
+`team2.locations` keeps its table name on purpose — `profiles.location_id`, the RLS
+helpers and `role_permissions.menu_id = 'locations'` all key on it. Only the app
+label says "Unit". The geofence columns:
+
+| Column | Meaning |
+|---|---|
+| `geofence_type` | `circle` or `polygon` |
+| `lat` / `lng` | circle centre; for a polygon, the centroid (used to centre the map) |
+| `geofence_m` | circle radius in metres |
+| `geofence_polygon` | `jsonb` array of `{"lat":…,"lng":…}`, at least 3, enforced by a check constraint |
+| `geofence_buffer_m` | extra tolerance in metres outside either shape (0–5000) |
 
 ### Things worth knowing
 

@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.3.0",
+    version: "0.5.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -258,6 +258,62 @@
   .placeholder p { font-size: 13px; color: var(--muted); max-width: 340px; line-height: 1.55; }
   button.go.compact { width: auto; padding: 11px 20px; margin-top: 6px; font-size: 14px; }
 
+  /* ---------- Master list (Unit) ---------- */
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 16px; }
+  .toolbar .search { flex: 1 1 200px; }
+  .chk { display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none;
+         font-size: 12.5px; color: var(--muted); flex: 0 0 auto; }
+  .chk input { accent-color: var(--brand); width: 15px; height: 15px; }
+  .rows { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .row-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 14px 16px;
+    display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .row-main { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .row-code { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .row-meta { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+  .row-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pill { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+          padding: 4px 9px; border-radius: 999px; flex: 0 0 auto; }
+  .pill.on { background: var(--brand-soft); color: var(--brand-deep); }
+  .pill.off { background: #f0f0ef; color: #8a8a86; }
+  .pill.geo { background: #eef7f1; color: #1c7a4b; }
+  button.mini {
+    background: #fff; border: 1px solid var(--border); color: var(--text);
+    font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 9px; padding: 7px 12px; cursor: pointer;
+  }
+  button.mini:hover { border-color: var(--brand); color: var(--brand); }
+  button.mini.danger:hover { border-color: var(--error); color: var(--error); }
+  .state { padding: 34px 20px; text-align: center; color: var(--muted); font-size: 13.5px; }
+
+  /* ---------- Modal ---------- */
+  .modal { position: fixed; inset: 0; z-index: 60; background: rgba(27, 32, 51, 0.42);
+           display: flex; align-items: center; justify-content: center; padding: 18px; }
+  .modal[hidden] { display: none; }
+  .modal-card { width: min(560px, 100%); max-height: 92vh; overflow-y: auto;
+                display: flex; flex-direction: column; gap: 16px; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .modal-head h3 { font-family: var(--serif); font-size: 19px; font-weight: 700; color: var(--ink); }
+  .form-grid { display: flex; flex-direction: column; gap: 13px; }
+  .form-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+  textarea.txt { resize: vertical; min-height: 64px; font-family: inherit; }
+  .modal-acts { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .sec {
+    border-top: 1px solid var(--border); padding-top: 14px; margin-top: 2px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .radio-row { display: flex; gap: 18px; flex-wrap: wrap; }
+  .radio-row label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 14px; }
+  .radio-row input { accent-color: var(--brand); width: 16px; height: 16px; }
+  .map-box { height: 300px; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: #eef0f6; position: relative; }
+  .map-off { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+             gap: 8px; text-align: center; padding: 20px; color: var(--muted); font-size: 13px; background: #fdf6f4; }
+  .map-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .hint b { color: var(--ink); font-weight: 600; }
+
   .scrim { display: none; }
 
   /* ---------- Phones and small tablets: the tree becomes a slide-in drawer ---------- */
@@ -386,6 +442,20 @@
   </div>
 </section>
 
+<!-- ============ Modal (forms & confirmations) ============ -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-card panel">
+    <div class="modal-head">
+      <h3 id="modalTitle"></h3>
+      <button class="iconbtn" id="modalX" type="button" title="Close" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+      </button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -454,9 +524,12 @@
 
     { group: "Masters", id: "parties",         label: "Customer / Site", desc: "Who the team visits",    icon: "building" },
     { group: "Masters", id: "visit_purposes",  label: "Visit Purpose",   desc: "Reasons for a visit",    icon: "tag" },
-    { group: "Masters", id: "locations",       label: "Location",        desc: "Offices &amp; geofences",    icon: "map" },
-    { group: "Masters", id: "departments",     label: "Department",      desc: "Departments",            icon: "grid" },
-    { group: "Masters", id: "designations",    label: "Designation",     desc: "Job titles",             icon: "badge" },
+    { group: "Masters", id: "locations",       label: "Unit",            desc: "Units, addresses &amp; geofences", icon: "map",
+      render: function (h) { renderUnits(h); } },
+    { group: "Masters", id: "departments",     label: "Department",      desc: "Departments",            icon: "grid",
+      render: function (h) { simpleMaster(h, DEPARTMENTS_M); } },
+    { group: "Masters", id: "designations",    label: "Designation",     desc: "Job titles",             icon: "badge",
+      render: function (h) { simpleMaster(h, DESIGNATIONS_M); } },
     { group: "Masters", id: "shifts",          label: "Shift",           desc: "Timings &amp; week offs",    icon: "clock" },
     { group: "Masters", id: "holidays",        label: "Holiday",         desc: "Holiday calendar",       icon: "star" },
     { group: "Masters", id: "leave_types",     label: "Leave Type",      desc: "Quotas &amp; rules",         icon: "list" },
@@ -639,6 +712,7 @@
     if (location.hash !== "#" + id) location.hash = "#" + id;
     markActive();
     closeDrawer();
+    closeModal();
     show("scr-app");
     $("content").scrollTop = 0;
   }
@@ -674,6 +748,607 @@
     closeDrawer();
     show("scr-app");
     $("content").scrollTop = 0;
+  }
+
+  // ---------- CSV helpers ----------
+  function csvCell(v) {
+    var t = v == null ? "" : String(v);
+    return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  }
+
+  function toCsv(rows) {
+    return rows.map(function (r) { return r.map(csvCell).join(","); }).join("\r\n");
+  }
+
+  // Handles quoted fields, embedded commas/newlines and doubled quotes.
+  function parseCsv(text) {
+    var rows = [], row = [], cell = "", q = false, i;
+    text = text.replace(/^\uFEFF/, "");               // strip BOM
+    for (i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { cell += '"'; i++; } else q = false;
+        } else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === ",") { row.push(cell); cell = ""; }
+      else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+      else if (c !== "\r") cell += c;
+    }
+    if (cell.length || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (x) { return String(x).trim() !== ""; }); });
+  }
+
+  function download(filename, text) {
+    var blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function today() { return new Date().toISOString().slice(0, 10); }
+
+  function truthy(v) {
+    var t = String(v == null ? "" : v).trim().toLowerCase();
+    return !(t === "no" || t === "false" || t === "0" || t === "n" || t === "inactive");
+  }
+
+  // ---------- Modal ----------
+  function openModal(title, html) {
+    $("modalTitle").textContent = title;
+    $("modalBody").innerHTML = html;
+    $("modal").hidden = false;
+  }
+  function closeModal() {
+    $("modal").hidden = true;
+    $("modalBody").innerHTML = "";
+  }
+
+  // Mirrors team2.can_edit: admins always, otherwise the matrix, and with no
+  // matrix row it falls back to manager-and-above. The database is what enforces it.
+  function canEditMenu(id) {
+    if (me.role === "superadmin" || me.role === "admin") return true;
+    var a = myAccess[id];
+    if (a === undefined) return me.role === "manager";
+    return a === "edit_own" || a === "edit_all";
+  }
+
+  function saveError(err) {
+    if (!err) return "Could not save";
+    if (err.code === "42501" || /row-level security/i.test(err.message || "")) {
+      return "You do not have rights to change this";
+    }
+    if (err.code === "23505") return "That code or name already exists";
+    return err.message || "Could not save";
+  }
+
+  // ---------- Simple name-only masters (Department, Designation) ----------
+  // One screen, driven by a config, so another such master is a config plus a table.
+  var DEPARTMENTS_M = {
+    menuId: "departments", table: "departments", codeField: "department_code",
+    one: "department", title: "Department",
+    placeholder: "e.g. Cutting", sample: ["Cutting", "Sewing", "Quality"]
+  };
+  var DESIGNATIONS_M = {
+    menuId: "designations", table: "designations", codeField: "designation_code",
+    one: "designation", title: "Designation",
+    placeholder: "e.g. Supervisor", sample: ["Supervisor", "Operator", "Executive"]
+  };
+
+  function simpleMaster(host, cfg) {
+    var mayEdit = canEditMenu(cfg.menuId);
+    var rows = [];
+
+    host.innerHTML =
+      '<div class="panel toolbar">' +
+        '<input class="txt search" id="sm-search" type="search" placeholder="Search ' + cfg.one + ' name or code">' +
+        '<label class="chk"><input type="checkbox" id="sm-inactive"> Show inactive</label>' +
+        '<button class="mini" id="sm-export" type="button">Export</button>' +
+        (mayEdit ? '<button class="mini" id="sm-import" type="button">Import</button>' : '') +
+        (mayEdit ? '<button class="go compact" id="sm-add" type="button">Add ' + cfg.one + '</button>' : '') +
+      '</div>' +
+      '<div class="rows" id="sm-rows"><div class="panel state">Loading…</div></div>';
+
+    $("sm-search").addEventListener("input", paint);
+    $("sm-inactive").addEventListener("change", paint);
+    $("sm-export").addEventListener("click", exportCsv);
+    if (mayEdit) {
+      $("sm-add").addEventListener("click", function () { form(null); });
+      $("sm-import").addEventListener("click", importDialog);
+    }
+
+    function visible() {
+      var q = $("sm-search").value.trim().toLowerCase();
+      var showOff = $("sm-inactive").checked;
+      return rows.filter(function (r) {
+        if (!r.active && !showOff) return false;
+        if (!q) return true;
+        return (r.name + " " + r[cfg.codeField]).toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
+    function paint() {
+      var list = visible();
+      var host2 = $("sm-rows");
+      if (!list.length) {
+        host2.innerHTML = '<div class="panel state">' +
+          (rows.length ? "Nothing matches that search."
+                       : "No " + cfg.one + " yet." + (mayEdit ? " Use <b>Add " + cfg.one + "</b> or <b>Import</b>." : "")) +
+          '</div>';
+        return;
+      }
+      host2.innerHTML = list.map(function (r) {
+        return '<div class="row-card">' +
+          '<div class="row-main">' +
+            '<span class="row-code">' + esc(r[cfg.codeField]) + '</span>' +
+            '<span class="row-name">' + esc(r.name) + '</span>' +
+          '</div>' +
+          '<div class="row-acts">' +
+            '<span class="pill ' + (r.active ? "on" : "off") + '">' + (r.active ? "Active" : "Inactive") + '</span>' +
+            (mayEdit ? '<button class="mini" data-edit="' + r.id + '" type="button">Edit</button>' +
+                       '<button class="mini danger" data-del="' + r.id + '" type="button">Delete</button>' : '') +
+          '</div></div>';
+      }).join("");
+
+      host2.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          form(rows.filter(function (r) { return r.id === b.dataset.edit; })[0]);
+        });
+      });
+      host2.querySelectorAll("[data-del]").forEach(function (b) {
+        b.addEventListener("click", function () { remove(b.dataset.del); });
+      });
+    }
+
+    async function load() {
+      var r = await sb.from(cfg.table).select("*").order(cfg.codeField);
+      if (r.error) {
+        $("sm-rows").innerHTML = '<div class="panel state">Could not load — ' + esc(r.error.message) + '</div>';
+        return;
+      }
+      rows = r.data || [];
+      paint();
+    }
+
+    async function remove(id) {
+      var r0 = rows.filter(function (x) { return x.id === id; })[0];
+      if (!r0) return;
+      if (!window.confirm('Delete "' + r0.name + '"? This cannot be undone.')) return;
+      var r = await sb.from(cfg.table).delete().eq("id", id);
+      if (r.error) { window.alert(saveError(r.error)); return; }
+      load();
+    }
+
+    function form(row) {
+      openModal(row ? "Edit " + cfg.one : "Add " + cfg.one,
+        '<div class="form-grid">' +
+          '<div class="field"><label for="sm-name">' + cfg.title + ' name</label>' +
+            '<input class="txt" id="sm-name" type="text" placeholder="' + cfg.placeholder + '" autocomplete="off"></div>' +
+          '<label class="chk"><input type="checkbox" id="sm-active" checked> Active</label>' +
+          '<div class="msg" id="sm-msg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="sm-cancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="sm-save" type="button">Save</button>' +
+          '</div>' +
+        '</div>');
+      $("sm-name").value = row ? row.name : "";
+      $("sm-active").checked = row ? !!row.active : true;
+      $("sm-cancel").addEventListener("click", closeModal);
+      $("sm-name").focus();
+      $("sm-save").addEventListener("click", async function () {
+        var name = $("sm-name").value.trim();
+        if (!name) { setMsg($("sm-msg"), "Enter the " + cfg.one + " name"); return; }
+        var clash = rows.some(function (r) {
+          return r.name.toLowerCase() === name.toLowerCase() && (!row || r.id !== row.id);
+        });
+        if (clash) { setMsg($("sm-msg"), "That name already exists"); return; }
+
+        var payload = { name: name, active: $("sm-active").checked };
+        $("sm-save").disabled = true;
+        setMsg($("sm-msg"), "Saving…", true);
+        var r = row
+          ? await sb.from(cfg.table).update(payload).eq("id", row.id)
+          : await sb.from(cfg.table).insert(Object.assign({ created_by: me.id }, payload));
+        $("sm-save").disabled = false;
+        if (r.error) { setMsg($("sm-msg"), saveError(r.error)); return; }
+        closeModal();
+        load();
+      });
+    }
+
+    function exportCsv() {
+      var list = visible();
+      var out = [["code", "name", "active"]].concat(list.map(function (r) {
+        return [r[cfg.codeField], r.name, r.active ? "yes" : "no"];
+      }));
+      download(cfg.table + "-" + today() + ".csv", toCsv(out));
+    }
+
+    function importDialog() {
+      openModal("Import " + cfg.title.toLowerCase() + "s",
+        '<div class="form-grid">' +
+          '<p class="hint">The file needs a <b>name</b> column. An <b>active</b> column ' +
+            '(yes/no) is optional and defaults to yes. The <b>code</b> column is ignored — ' +
+            'codes are generated. Names that already exist are skipped.</p>' +
+          '<div class="map-tools">' +
+            '<button class="mini" id="sm-tpl" type="button">Download template</button>' +
+            '<input class="txt" id="sm-file" type="file" accept=".csv,text/csv" style="flex:1 1 180px">' +
+          '</div>' +
+          '<div id="sm-preview"></div>' +
+          '<div class="msg" id="sm-imsg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="sm-icancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="sm-igo" type="button" disabled>Import</button>' +
+          '</div>' +
+        '</div>');
+
+      var pending = [];
+      $("sm-icancel").addEventListener("click", closeModal);
+      $("sm-tpl").addEventListener("click", function () {
+        var tpl = [["name", "active"]].concat(cfg.sample.map(function (n) { return [n, "yes"]; }));
+        download(cfg.table + "-import-template.csv", toCsv(tpl));
+      });
+
+      $("sm-file").addEventListener("change", function () {
+        var f = this.files && this.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var grid = parseCsv(String(reader.result));
+          if (!grid.length) { setMsg($("sm-imsg"), "That file is empty"); return; }
+          var head = grid[0].map(function (h) { return h.trim().toLowerCase(); });
+          var iName = head.indexOf("name");
+          var iActive = head.indexOf("active");
+          if (iName === -1) { setMsg($("sm-imsg"), 'No "name" column in that file'); return; }
+
+          var seen = {}, dup = 0, blank = 0;
+          var existing = {};
+          rows.forEach(function (r) { existing[r.name.toLowerCase()] = true; });
+          pending = [];
+          grid.slice(1).forEach(function (r) {
+            var name = (r[iName] || "").trim();
+            if (!name) { blank++; return; }
+            var key = name.toLowerCase();
+            if (existing[key] || seen[key]) { dup++; return; }
+            seen[key] = true;
+            pending.push({ name: name, active: iActive === -1 ? true : truthy(r[iActive]), created_by: me.id });
+          });
+
+          $("sm-preview").innerHTML = '<div class="panel state" style="padding:14px">' +
+            '<b>' + pending.length + '</b> to import' +
+            (dup ? ' · ' + dup + ' skipped (already exist or repeated)' : '') +
+            (blank ? ' · ' + blank + ' blank rows ignored' : '') +
+            (pending.length ? '<br><span class="hint">' +
+              esc(pending.slice(0, 5).map(function (x) { return x.name; }).join(", ")) +
+              (pending.length > 5 ? ", …" : "") + '</span>' : '') +
+            '</div>';
+          setMsg($("sm-imsg"), "");
+          $("sm-igo").disabled = pending.length === 0;
+        };
+        reader.readAsText(f);
+      });
+
+      $("sm-igo").addEventListener("click", async function () {
+        if (!pending.length) return;
+        $("sm-igo").disabled = true;
+        setMsg($("sm-imsg"), "Importing " + pending.length + "…", true);
+        var r = await sb.from(cfg.table).insert(pending);
+        if (r.error) { $("sm-igo").disabled = false; setMsg($("sm-imsg"), saveError(r.error)); return; }
+        closeModal();
+        load();
+      });
+    }
+
+    load();
+  }
+
+  // ---------- Unit master ----------
+  // Stored in team2.locations — the table keeps its name because profiles.location_id,
+  // the RLS helpers and role_permissions.menu_id = 'locations' all key on it.
+  var UNIT_FALLBACK_CENTER = { lat: 11.1085, lng: 77.3411 };   // Tirupur
+  var units = [];
+
+  function geoSummary(u) {
+    if (u.geofence_type === "polygon") {
+      var n = Array.isArray(u.geofence_polygon) ? u.geofence_polygon.length : 0;
+      return "Polygon · " + n + " point" + (n === 1 ? "" : "s");
+    }
+    return "Circle · " + (u.geofence_m || 0) + " m";
+  }
+
+  function renderUnits(host) {
+    var mayEdit = canEditMenu("locations");
+    host.innerHTML =
+      '<div class="panel toolbar">' +
+        '<input class="txt search" id="uSearch" type="search" placeholder="Search name, code or address">' +
+        '<label class="chk"><input type="checkbox" id="uInactive"> Show inactive</label>' +
+        (mayEdit ? '<button class="go compact" id="uAdd" type="button">Add unit</button>' : '') +
+      '</div>' +
+      '<div class="rows" id="uRows"><div class="panel state">Loading…</div></div>';
+
+    $("uSearch").addEventListener("input", paint);
+    $("uInactive").addEventListener("change", paint);
+    if (mayEdit) $("uAdd").addEventListener("click", function () { unitForm(null); });
+
+    function paint() {
+      var q = $("uSearch").value.trim().toLowerCase();
+      var showOff = $("uInactive").checked;
+      var list = units.filter(function (u) {
+        if (!u.active && !showOff) return false;
+        if (!q) return true;
+        return [u.name, u.location_code, u.address, u.city].join(" ").toLowerCase().indexOf(q) !== -1;
+      });
+
+      var host2 = $("uRows");
+      if (!list.length) {
+        host2.innerHTML = '<div class="panel state">' +
+          (units.length ? "No unit matches that search." : "No units yet." +
+            (mayEdit ? " Use <b>Add unit</b> to create the first one." : "")) + '</div>';
+        return;
+      }
+      host2.innerHTML = list.map(function (u) {
+        return '<div class="row-card">' +
+          '<div class="row-main">' +
+            '<span class="row-code">' + esc(u.location_code) + '</span>' +
+            '<span class="row-name">' + esc(u.name) + '</span>' +
+            (u.address || u.city ? '<span class="row-meta">' +
+              esc([u.address, u.city, u.pincode].filter(Boolean).join(", ")) + '</span>' : '') +
+            '<span class="row-meta">' + esc(geoSummary(u)) +
+              ' · buffer ' + (u.geofence_buffer_m || 0) + ' m' +
+              (u.lat != null ? ' · ' + Number(u.lat).toFixed(5) + ", " + Number(u.lng).toFixed(5) : ' · no point set') +
+            '</span>' +
+          '</div>' +
+          '<div class="row-acts">' +
+            '<span class="pill ' + (u.active ? "on" : "off") + '">' + (u.active ? "Active" : "Inactive") + '</span>' +
+            (mayEdit ? '<button class="mini" data-edit="' + u.id + '" type="button">Edit</button>' +
+                       '<button class="mini danger" data-del="' + u.id + '" type="button">Delete</button>' : '') +
+          '</div>' +
+        '</div>';
+      }).join("");
+
+      host2.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          unitForm(units.filter(function (u) { return u.id === b.dataset.edit; })[0]);
+        });
+      });
+      host2.querySelectorAll("[data-del]").forEach(function (b) {
+        b.addEventListener("click", function () { removeUnit(b.dataset.del); });
+      });
+    }
+
+    async function load() {
+      var r = await sb.from("locations").select("*").order("location_code");
+      if (r.error) {
+        $("uRows").innerHTML = '<div class="panel state">Could not load units — ' + esc(r.error.message) + '</div>';
+        return;
+      }
+      units = r.data || [];
+      paint();
+    }
+
+    async function removeUnit(id) {
+      var u = units.filter(function (x) { return x.id === id; })[0];
+      if (!u) return;
+      if (!window.confirm('Delete "' + u.name + '"? This cannot be undone.')) return;
+      var r = await sb.from("locations").delete().eq("id", id);
+      if (r.error) { window.alert(saveError(r.error)); return; }
+      load();
+    }
+
+    renderUnits.reload = load;
+    load();
+  }
+
+  // ---------- Add / edit a unit ----------
+  function unitForm(row) {
+    var st = {
+      type: (row && row.geofence_type) || "circle",
+      lat: row && row.lat != null ? Number(row.lat) : null,
+      lng: row && row.lng != null ? Number(row.lng) : null,
+      radius: row && row.geofence_m ? Number(row.geofence_m) : 200,
+      polygon: row && Array.isArray(row.geofence_polygon) ? row.geofence_polygon.slice() : [],
+      map: null, circle: null, poly: null
+    };
+
+    openModal(row ? "Edit unit" : "Add unit",
+      '<div class="form-grid">' +
+        '<div class="field"><label for="u-name">Unit name</label>' +
+          '<input class="txt" id="u-name" type="text" placeholder="e.g. CTPL-PD" autocomplete="off"></div>' +
+        '<div class="field"><label for="u-addr">Unit address</label>' +
+          '<input class="txt" id="u-addr" type="text" placeholder="Start typing to search" autocomplete="off"></div>' +
+        '<div class="form-2">' +
+          '<div class="field"><label for="u-city">City</label><input class="txt" id="u-city" type="text" autocomplete="off"></div>' +
+          '<div class="field"><label for="u-pin">Pincode</label><input class="txt" id="u-pin" type="text" inputmode="numeric" autocomplete="off"></div>' +
+        '</div>' +
+        '<label class="chk"><input type="checkbox" id="u-active" checked> Active</label>' +
+
+        '<div class="sec">' +
+          '<span class="sec-title">Geofence</span>' +
+          '<div class="radio-row">' +
+            '<label><input type="radio" name="u-gf" value="circle"> Circle</label>' +
+            '<label><input type="radio" name="u-gf" value="polygon"> Polygon (custom drawn)</label>' +
+          '</div>' +
+          '<div class="map-box" id="uMap"></div>' +
+          '<div class="map-tools" id="uCircleRow">' +
+            '<div class="field" style="flex:1 1 150px"><label for="u-radius">Radius (metres)</label>' +
+              '<input class="txt" id="u-radius" type="number" min="20" max="5000" step="10"></div>' +
+          '</div>' +
+          '<div class="map-tools" id="uPolyRow" hidden>' +
+            '<span class="hint">Click the map to add corners (min 3), drag them to adjust. ' +
+              '<b><span id="uPolyCount">0</span> points</b></span>' +
+            '<button class="mini" id="uUndo" type="button">Undo point</button>' +
+            '<button class="mini" id="uClear" type="button">Clear</button>' +
+          '</div>' +
+          '<div class="field"><label for="u-buffer">Buffer (metres – extra tolerance)</label>' +
+            '<input class="txt" id="u-buffer" type="number" min="0" max="5000" step="10"></div>' +
+        '</div>' +
+
+        '<div class="msg" id="uMsg"></div>' +
+        '<div class="modal-acts">' +
+          '<button class="mini" id="uCancel" type="button">Cancel</button>' +
+          '<button class="go compact" id="uSave" type="button">Save unit</button>' +
+        '</div>' +
+      '</div>');
+
+    $("u-name").value    = row ? (row.name || "") : "";
+    $("u-addr").value    = row ? (row.address || "") : "";
+    $("u-city").value    = row ? (row.city || "") : "";
+    $("u-pin").value     = row ? (row.pincode || "") : "";
+    $("u-active").checked = row ? !!row.active : true;
+    $("u-radius").value  = st.radius;
+    $("u-buffer").value  = row && row.geofence_buffer_m != null ? row.geofence_buffer_m : 100;
+    document.querySelectorAll('input[name="u-gf"]').forEach(function (r2) {
+      r2.checked = r2.value === st.type;
+      r2.addEventListener("change", function () { if (r2.checked) setType(r2.value); });
+    });
+
+    $("uCancel").addEventListener("click", closeModal);
+    $("u-radius").addEventListener("input", function () {
+      var v = parseInt(this.value, 10);
+      if (!isFinite(v)) return;
+      st.radius = v;
+      if (st.circle) st.circle.setRadius(v);
+    });
+    $("uSave").addEventListener("click", save);
+
+    function setType(t) {
+      st.type = t;
+      $("uCircleRow").hidden = t !== "circle";
+      $("uPolyRow").hidden = t !== "polygon";
+      if (st.circle) st.circle.setMap(t === "circle" ? st.map : null);
+      if (st.poly) st.poly.setMap(t === "polygon" ? st.map : null);
+    }
+    setType(st.type);
+
+    initUnitMap(st);
+
+    async function save() {
+      var name = $("u-name").value.trim();
+      var msg = $("uMsg");
+      if (!name) { setMsg(msg, "Enter the unit name"); return; }
+      if (st.type === "polygon" && st.polygon.length < 3) {
+        setMsg(msg, "Draw at least 3 corners on the map, or switch to Circle"); return;
+      }
+      if (st.type === "circle" && (st.lat == null || st.lng == null)) {
+        setMsg(msg, "Set the unit's point on the map first"); return;
+      }
+
+      var payload = {
+        name: name,
+        address: $("u-addr").value.trim() || null,
+        city: $("u-city").value.trim() || null,
+        pincode: $("u-pin").value.trim() || null,
+        active: $("u-active").checked,
+        geofence_type: st.type,
+        geofence_buffer_m: parseInt($("u-buffer").value, 10) || 0
+      };
+      if (st.type === "circle") {
+        payload.lat = st.lat; payload.lng = st.lng;
+        payload.geofence_m = st.radius;
+        payload.geofence_polygon = null;
+      } else {
+        payload.geofence_polygon = st.polygon;
+        var c = centroid(st.polygon);
+        payload.lat = c.lat; payload.lng = c.lng;
+      }
+
+      $("uSave").disabled = true;
+      setMsg(msg, "Saving…", true);
+      var r = row
+        ? await sb.from("locations").update(payload).eq("id", row.id)
+        : await sb.from("locations").insert(Object.assign({ created_by: me.id }, payload));
+      $("uSave").disabled = false;
+      if (r.error) { setMsg(msg, saveError(r.error)); return; }
+      closeModal();
+      if (renderUnits.reload) renderUnits.reload();
+    }
+  }
+
+  function centroid(pts) {
+    var la = 0, ln = 0;
+    pts.forEach(function (p) { la += Number(p.lat); ln += Number(p.lng); });
+    return { lat: la / pts.length, lng: ln / pts.length };
+  }
+
+  // The map. DrawingManager was removed from the Maps JS API in 3.65, so the
+  // polygon is drawn by hand: map clicks push vertices onto an editable Polygon.
+  async function initUnitMap(st) {
+    var box = $("uMap");
+    var maps;
+    try { maps = await GMaps.load(); }
+    catch (e) { maps = null; }
+
+    if (!maps) {
+      box.innerHTML = '<div class="map-off">' +
+        '<b>Map not available</b>' +
+        '<span>No Google Maps key is set, so the geofence cannot be drawn yet. ' +
+        'Name, address and buffer still save.</span></div>';
+      return;
+    }
+
+    var center = (st.lat != null && st.lng != null) ? { lat: st.lat, lng: st.lng } : UNIT_FALLBACK_CENTER;
+    st.map = new maps.Map(box, {
+      center: center, zoom: (st.lat != null ? 17 : 12),
+      mapTypeId: "hybrid", streetViewControl: false, fullscreenControl: false, mapTypeControl: true
+    });
+
+    var style = { fillColor: "#4169e1", fillOpacity: 0.12, strokeColor: "#4169e1", strokeWeight: 2 };
+
+    st.circle = new maps.Circle(Object.assign({
+      map: null, center: center, radius: st.radius, editable: true, draggable: true
+    }, style));
+    st.circle.addListener("radius_changed", function () {
+      st.radius = Math.round(st.circle.getRadius());
+      if ($("u-radius")) $("u-radius").value = st.radius;
+    });
+    st.circle.addListener("center_changed", function () {
+      var c = st.circle.getCenter();
+      st.lat = c.lat(); st.lng = c.lng();
+    });
+
+    st.poly = new maps.Polygon(Object.assign({ map: null, paths: st.polygon, editable: true }, style));
+    function syncPoly() {
+      var path = st.poly.getPath();
+      st.polygon = [];
+      for (var i = 0; i < path.getLength(); i++) {
+        var q = path.getAt(i);
+        st.polygon.push({ lat: q.lat(), lng: q.lng() });
+      }
+      if ($("uPolyCount")) $("uPolyCount").textContent = st.polygon.length;
+    }
+    ["insert_at", "set_at", "remove_at"].forEach(function (ev) {
+      st.poly.getPath().addListener(ev, syncPoly);
+    });
+    syncPoly();
+
+    // A click drops a polygon corner, or moves the circle when none is set yet.
+    st.map.addListener("click", function (e) {
+      if (st.type === "polygon") { st.poly.getPath().push(e.latLng); return; }
+      st.circle.setCenter(e.latLng);
+      st.lat = e.latLng.lat(); st.lng = e.latLng.lng();
+    });
+
+    if ($("uUndo")) $("uUndo").addEventListener("click", function () {
+      var path = st.poly.getPath();
+      if (path.getLength()) path.removeAt(path.getLength() - 1);
+    });
+    if ($("uClear")) $("uClear").addEventListener("click", function () { st.poly.getPath().clear(); });
+
+    // Put the shapes on the map for whichever type is selected.
+    st.circle.setMap(st.type === "circle" ? st.map : null);
+    st.poly.setMap(st.type === "polygon" ? st.map : null);
+
+    // Address search — recentres the map and moves the circle with it.
+    GMaps.autocomplete($("u-addr"), function (place) {
+      if (place.address) $("u-addr").value = place.address;
+      var at = { lat: place.lat, lng: place.lng };
+      st.map.setCenter(at); st.map.setZoom(17);
+      if (st.type === "circle") {
+        st.circle.setCenter(at); st.lat = at.lat; st.lng = at.lng;
+      }
+    });
   }
 
   // ---------- Google Maps ----------
@@ -894,8 +1569,13 @@
   $("btnDrawer").addEventListener("click", openDrawer);
   $("btnDrawerClose").addEventListener("click", closeDrawer);
   $("scrim").addEventListener("click", closeDrawer);
+  $("modalX").addEventListener("click", closeModal);
+  $("modal").addEventListener("click", function (e) {
+    if (e.target === $("modal")) closeModal();      // backdrop only, never the card
+  });
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") closeDrawer();
+    if (e.key !== "Escape") return;
+    if (!$("modal").hidden) closeModal(); else closeDrawer();
   });
 
   window.addEventListener("hashchange", function () {
