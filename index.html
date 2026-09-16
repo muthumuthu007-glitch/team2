@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.8.0",
+    version: "0.9.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -344,6 +344,24 @@
   select.cell[data-level="edit_own"], select.cell[data-level="edit_all"] { background: #fdf7ee; border-color: #f0dcc2; }
   select.cell.dirty { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(47, 75, 208, 0.12); }
   .locked-col { text-align: center !important; color: var(--ok); }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .filters select.txt { width: auto; min-width: 128px; padding: 8px 10px; font-size: 12.5px; }
+  .result-count { font-size: 12px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+  table.matrix td.nm { font-weight: 600; color: var(--ink); }
+  .role-tag {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    background: var(--brand-soft); color: var(--brand-deep);
+    font-size: 11px; font-weight: 600; text-transform: lowercase;
+  }
+  .role-tag.admin { background: #ede9fb; color: #5b3fc4; }
+  .role-tag.superadmin { background: #fdecea; color: #a3372c; }
+  .role-tag.manager { background: #eaf3fd; color: #2a5d99; }
+  .act-btn {
+    background: #fff; border: 1px solid var(--border); border-radius: 8px;
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--muted); margin-right: 5px;
+  }
+  .act-btn:hover { border-color: var(--brand); color: var(--brand); }
   .legend { font-size: 12px; color: var(--muted); line-height: 1.7; padding: 12px 2px 0; }
   .legend b { color: var(--ink); font-weight: 600; }
   .legend .key { color: var(--ink); font-weight: 600; }
@@ -599,8 +617,9 @@
     { group: "Reports", id: "reports", label: "Reports",           desc: "Attendance, leave, visits", icon: "chart" },
     { group: "Reports", id: "trips",   label: "Travel / Distance", desc: "Km travelled &amp; claims",     icon: "car" },
 
-    { group: "Admin", id: "users",       label: "User Master", desc: "Logins &amp; reporting line", icon: "users",
-      roles: ["superadmin", "admin"] },
+    { group: "Admin", id: "users",       label: "User Master", desc: "Staff, logins &amp; reporting line", icon: "users",
+      roles: ["superadmin", "admin"],
+      render: function (h) { renderUsers(h); } },
     { group: "Admin", id: "permissions", label: "Permissions", desc: "What each role can do",   icon: "sliders",
       roles: ["superadmin", "admin"],
       render: function (h) { renderPermissions(h); } },
@@ -1156,6 +1175,491 @@
         var r = await sb.from(cfg.table).insert(pending);
         if (r.error) { $("sm-igo").disabled = false; setMsg($("sm-imsg"), saveError(r.error)); return; }
         closeModal();
+        load();
+      });
+    }
+
+    load();
+  }
+
+  // ---------- User master ----------
+  // Creating a login needs the service-role key, which cannot live in a browser,
+  // so adds and password resets go through the `team2-admin` edge function.
+  // Everything else is a plain table write, guarded by RLS.
+  var LOGIN_ROLES = ["staff", "manager", "admin", "superadmin"];
+
+  async function adminCall(payload) {
+    var ses = await sb.auth.getSession();
+    var token = ses.data.session && ses.data.session.access_token;
+    if (!token) return { error: "Your session expired — sign in again" };
+    try {
+      var res = await fetch(CFG.url + "/functions/v1/team2-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify(payload)
+      });
+      var body = await res.json().catch(function () { return {}; });
+      if (!res.ok) return { error: body.error || ("Request failed (" + res.status + ")") };
+      return body;
+    } catch (e) {
+      return { error: "Could not reach the server — check your connection" };
+    }
+  }
+
+  function renderUsers(host) {
+    var staff = [], lists = { departments: [], designations: [], locations: [], shifts: [], roles: [] };
+    var byId = {};
+
+    host.innerHTML =
+      '<div class="panel toolbar" style="flex-direction:column;align-items:stretch;gap:12px">' +
+        '<div class="filters">' +
+          '<input class="txt search" id="us-search" type="search" placeholder="Search by name, mobile or staff ID…" style="flex:1 1 220px">' +
+          '<button class="mini" id="us-export" type="button">Export</button>' +
+          '<button class="mini" id="us-tpl" type="button">Template</button>' +
+          '<button class="mini" id="us-import" type="button">Bulk import</button>' +
+          '<button class="go compact" id="us-add" type="button">Add staff</button>' +
+        '</div>' +
+        '<div class="filters">' +
+          '<select class="txt" id="us-f-role"><option value="">Role: All</option></select>' +
+          '<select class="txt" id="us-f-status"><option value="">Status: All</option>' +
+            '<option value="active">Active</option><option value="inactive">Inactive</option></select>' +
+          '<select class="txt" id="us-f-department"><option value="">Department: All</option></select>' +
+          '<select class="txt" id="us-f-designation"><option value="">Designation: All</option></select>' +
+          '<select class="txt" id="us-f-shift"><option value="">Schedule: All</option></select>' +
+          '<select class="txt" id="us-f-location"><option value="">Unit: All</option></select>' +
+          '<span class="result-count" id="us-count"></span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="msg" id="us-msg" style="margin:10px 0"></div>' +
+      '<div id="us-host"><div class="panel state">Loading…</div></div>';
+
+    ["us-search", "us-f-role", "us-f-status", "us-f-department",
+     "us-f-designation", "us-f-shift", "us-f-location"].forEach(function (id) {
+      $(id).addEventListener("input", paint);
+      $(id).addEventListener("change", paint);
+    });
+    $("us-add").addEventListener("click", function () { form(null); });
+    $("us-export").addEventListener("click", exportCsv);
+    $("us-tpl").addEventListener("click", template);
+    $("us-import").addEventListener("click", importDialog);
+
+    function nameOf(list, id) {
+      if (!id) return "";
+      var hit = lists[list].filter(function (x) { return x.id === id; })[0];
+      return hit ? hit.name : "";
+    }
+    function staffName(id) { return id && byId[id] ? byId[id].name : ""; }
+
+    function visible() {
+      var q = $("us-search").value.trim().toLowerCase();
+      var fRole = $("us-f-role").value, fStatus = $("us-f-status").value;
+      var fDep = $("us-f-department").value, fDes = $("us-f-designation").value;
+      var fShift = $("us-f-shift").value, fLoc = $("us-f-location").value;
+      return staff.filter(function (u) {
+        if (fRole && u.role !== fRole) return false;
+        if (fStatus && (fStatus === "active") !== !!u.active) return false;
+        if (fDep && u.department_id !== fDep) return false;
+        if (fDes && u.designation_id !== fDes) return false;
+        if (fShift && u.shift_id !== fShift) return false;
+        if (fLoc && u.location_id !== fLoc) return false;
+        if (!q) return true;
+        return [u.name, u.username, u.emp_code].join(" ").toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
+    function paint() {
+      var list = visible();
+      $("us-count").textContent = list.length + " of " + staff.length + " staff";
+      var host2 = $("us-host");
+      if (!list.length) {
+        host2.innerHTML = '<div class="panel state">' +
+          (staff.length ? "Nobody matches those filters." : "No staff yet — use <b>Add staff</b> or <b>Bulk import</b>.") +
+          '</div>';
+        return;
+      }
+      var head = '<thead><tr>' +
+        ["Name", "Staff ID", "Mobile", "Role", "Department", "Designation",
+         "Report 1", "Report 2", "Report 3", "Unit", "Schedule", "Status", "Actions"]
+          .map(function (h, i) { return '<th' + (i === 0 ? ' class="page-col"' : '') + '>' + h + '</th>'; }).join("") +
+        '</tr></thead>';
+
+      var body = list.map(function (u) {
+        return '<tr>' +
+          '<td class="page-col nm">' + esc(u.name) + '</td>' +
+          '<td>' + esc(u.emp_code || "–") + '</td>' +
+          '<td>' + esc(u.username) + '</td>' +
+          '<td><span class="role-tag ' + esc(u.role) + '">' + esc(u.role) + '</span></td>' +
+          '<td>' + esc(nameOf("departments", u.department_id) || "–") + '</td>' +
+          '<td>' + esc(nameOf("designations", u.designation_id) || "–") + '</td>' +
+          '<td>' + esc(staffName(u.reporting_to) || "–") + '</td>' +
+          '<td>' + esc(staffName(u.reporting_to_2) || "–") + '</td>' +
+          '<td>' + esc(staffName(u.reporting_to_3) || "–") + '</td>' +
+          '<td>' + esc(nameOf("locations", u.location_id) || "–") + '</td>' +
+          '<td>' + esc(nameOf("shifts", u.shift_id) || "–") + '</td>' +
+          '<td><span class="pill ' + (u.active ? "on" : "off") + '">' + (u.active ? "Active" : "Inactive") + '</span></td>' +
+          '<td style="white-space:nowrap">' +
+            '<button class="act-btn" data-edit="' + u.id + '" title="Edit" type="button">' + svg("edit", 14) + '</button>' +
+            '<button class="act-btn" data-pw="' + u.id + '" title="Set password" type="button">' + svg("key", 14) + '</button>' +
+            '<button class="act-btn" data-toggle="' + u.id + '" title="' +
+              (u.active ? "Deactivate" : "Activate") + '" type="button">' + svg("check", 14) + '</button>' +
+          '</td></tr>';
+      }).join("");
+
+      host2.innerHTML = '<div class="matrix-wrap"><table class="matrix">' + head + '<tbody>' + body + '</tbody></table></div>' +
+        '<div class="legend">A login is the <b>mobile number</b>. Staff are never deleted — ' +
+        'switch them to <b>Inactive</b> instead, so their attendance, leave and visit history stays intact.</div>';
+
+      host2.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.addEventListener("click", function () { form(byId[b.dataset.edit]); });
+      });
+      host2.querySelectorAll("[data-pw]").forEach(function (b) {
+        b.addEventListener("click", function () { passwordForm(byId[b.dataset.pw]); });
+      });
+      host2.querySelectorAll("[data-toggle]").forEach(function (b) {
+        b.addEventListener("click", function () { toggleActive(byId[b.dataset.toggle]); });
+      });
+    }
+
+    function fillFilter(id, rows) {
+      var sel = $(id);
+      rows.forEach(function (r) {
+        var o = document.createElement("option");
+        o.value = r.id; o.textContent = r.name;
+        sel.appendChild(o);
+      });
+    }
+
+    async function load() {
+      var res = await Promise.all([
+        sb.from("profiles").select("*").order("name"),
+        sb.from("departments").select("id, name, active").order("name"),
+        sb.from("designations").select("id, name, active").order("name"),
+        sb.from("locations").select("id, name, active").order("name"),
+        sb.from("shifts").select("id, name, active").order("name"),
+        sb.from("roles").select("id, name, active").order("name")
+      ]);
+      if (res[0].error) {
+        $("us-host").innerHTML = '<div class="panel state">Could not load staff — ' + esc(res[0].error.message) + '</div>';
+        return;
+      }
+      staff = res[0].data || [];
+      byId = {};
+      staff.forEach(function (u) { byId[u.id] = u; });
+      lists.departments = res[1].data || [];
+      lists.designations = res[2].data || [];
+      lists.locations = res[3].data || [];
+      lists.shifts = res[4].data || [];
+      lists.roles = res[5].data || [];
+
+      if (!$("us-f-role").dataset.filled) {
+        LOGIN_ROLES.forEach(function (r) {
+          var o = document.createElement("option");
+          o.value = r; o.textContent = r;
+          $("us-f-role").appendChild(o);
+        });
+        fillFilter("us-f-department", lists.departments);
+        fillFilter("us-f-designation", lists.designations);
+        fillFilter("us-f-shift", lists.shifts);
+        fillFilter("us-f-location", lists.locations);
+        $("us-f-role").dataset.filled = "1";
+      }
+      paint();
+    }
+
+    function opts(rows, selected, blank) {
+      return '<option value="">' + (blank || "—") + '</option>' +
+        rows.map(function (r) {
+          return '<option value="' + r.id + '"' + (r.id === selected ? " selected" : "") + '>' + esc(r.name) + '</option>';
+        }).join("");
+    }
+
+    async function toggleActive(u) {
+      if (!u) return;
+      var to = !u.active;
+      if (!window.confirm((to ? "Activate " : "Deactivate ") + u.name + "?")) return;
+      var r = await sb.from("profiles").update({ active: to }).eq("id", u.id);
+      if (r.error) { setMsg($("us-msg"), saveError(r.error)); return; }
+      setMsg($("us-msg"), u.name + (to ? " activated" : " deactivated"), true);
+      load();
+    }
+
+    function passwordForm(u) {
+      if (!u) return;
+      openModal("Set password — " + u.name,
+        '<div class="form-grid">' +
+          '<p class="hint">Sets a new password for <b>' + esc(u.username) + '</b>. ' +
+            'Tell them out of band; it is not stored anywhere you can read it back.</p>' +
+          '<div class="field"><label for="pw-new">New password</label>' +
+            '<input class="txt" id="pw-new" type="password" autocomplete="new-password" placeholder="At least 6 characters"></div>' +
+          '<div class="msg" id="pw-msg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="pw-cancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="pw-save" type="button">Set password</button>' +
+          '</div>' +
+        '</div>');
+      $("pw-cancel").addEventListener("click", closeModal);
+      $("pw-save").addEventListener("click", async function () {
+        var v = $("pw-new").value;
+        if (v.length < 6) { setMsg($("pw-msg"), "At least 6 characters"); return; }
+        $("pw-save").disabled = true;
+        setMsg($("pw-msg"), "Saving…", true);
+        var r = await adminCall({ action: "set_password", user_id: u.id, password: v });
+        $("pw-save").disabled = false;
+        if (r.error) { setMsg($("pw-msg"), r.error); return; }
+        closeModal();
+        setMsg($("us-msg"), "Password updated for " + u.name, true);
+      });
+    }
+
+    function form(u) {
+      var others = staff.filter(function (x) { return !u || x.id !== u.id; });
+      openModal(u ? "Edit staff — " + u.name : "Add staff",
+        '<div class="form-grid">' +
+          '<div class="form-2">' +
+            '<div class="field"><label for="us-name">Name *</label>' +
+              '<input class="txt" id="us-name" type="text" autocomplete="off"></div>' +
+            '<div class="field"><label for="us-mobile">Mobile (this is the login) *</label>' +
+              '<input class="txt" id="us-mobile" type="tel" inputmode="numeric" maxlength="10" autocomplete="off"' +
+              (u ? " disabled" : "") + '></div>' +
+          '</div>' +
+          (u ? '' :
+            '<div class="field"><label for="us-pass">Password *</label>' +
+              '<input class="txt" id="us-pass" type="password" autocomplete="new-password" placeholder="At least 6 characters"></div>') +
+          '<div class="form-2">' +
+            '<div class="field"><label for="us-emp">Staff ID</label><input class="txt" id="us-emp" type="text" autocomplete="off"></div>' +
+            '<div class="field"><label for="us-email">Email</label><input class="txt" id="us-email" type="email" autocomplete="off"></div>' +
+          '</div>' +
+          '<div class="form-2">' +
+            '<div class="field"><label for="us-role">Login role *</label><select class="txt" id="us-role">' +
+              LOGIN_ROLES.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") +
+              '</select></div>' +
+            '<div class="field"><label for="us-roleid">Permission role</label>' +
+              '<select class="txt" id="us-roleid">' + opts(lists.roles, u && u.role_id) + '</select></div>' +
+          '</div>' +
+          '<div class="form-2">' +
+            '<div class="field"><label for="us-dep">Department</label>' +
+              '<select class="txt" id="us-dep">' + opts(lists.departments, u && u.department_id) + '</select></div>' +
+            '<div class="field"><label for="us-des">Designation</label>' +
+              '<select class="txt" id="us-des">' + opts(lists.designations, u && u.designation_id) + '</select></div>' +
+          '</div>' +
+          '<div class="form-2">' +
+            '<div class="field"><label for="us-loc">Unit</label>' +
+              '<select class="txt" id="us-loc">' + opts(lists.locations, u && u.location_id) + '</select></div>' +
+            '<div class="field"><label for="us-shift">Schedule</label>' +
+              '<select class="txt" id="us-shift">' + opts(lists.shifts, u && u.shift_id) + '</select></div>' +
+          '</div>' +
+          '<div class="sec">' +
+            '<span class="sec-title">Reporting</span>' +
+            '<div class="form-3">' +
+              '<div class="field"><label for="us-r1">Report 1</label>' +
+                '<select class="txt" id="us-r1">' + opts(others, u && u.reporting_to) + '</select></div>' +
+              '<div class="field"><label for="us-r2">Report 2</label>' +
+                '<select class="txt" id="us-r2">' + opts(others, u && u.reporting_to_2) + '</select></div>' +
+              '<div class="field"><label for="us-r3">Report 3</label>' +
+                '<select class="txt" id="us-r3">' + opts(others, u && u.reporting_to_3) + '</select></div>' +
+            '</div>' +
+            '<span class="sec-note">Only <b>Report 1</b> decides what a manager can see — it is the ' +
+              'chain the database walks. Reports 2 and 3 are escalation contacts.</span>' +
+          '</div>' +
+          '<label class="chk"><input type="checkbox" id="us-active" checked> Active</label>' +
+          '<div class="msg" id="us-fmsg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="us-cancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="us-save" type="button">' + (u ? "Save changes" : "Create staff") + '</button>' +
+          '</div>' +
+        '</div>');
+
+      $("us-name").value = u ? u.name : "";
+      $("us-mobile").value = u ? u.username : "";
+      $("us-emp").value = u && u.emp_code ? u.emp_code : "";
+      $("us-email").value = u && u.email ? u.email : "";
+      $("us-role").value = u ? u.role : "staff";
+      $("us-active").checked = u ? !!u.active : true;
+      if (!u) {
+        $("us-mobile").addEventListener("input", function () {
+          this.value = this.value.replace(/\D/g, "").slice(0, 10);
+        });
+      }
+      $("us-cancel").addEventListener("click", closeModal);
+
+      $("us-save").addEventListener("click", async function () {
+        var msg = $("us-fmsg");
+        var name = $("us-name").value.trim();
+        if (!name) { setMsg(msg, "Enter the name"); return; }
+
+        var profile = {
+          name: name,
+          role: $("us-role").value,
+          emp_code: $("us-emp").value.trim() || null,
+          email: $("us-email").value.trim() || null,
+          role_id: $("us-roleid").value || null,
+          department_id: $("us-dep").value || null,
+          designation_id: $("us-des").value || null,
+          location_id: $("us-loc").value || null,
+          shift_id: $("us-shift").value || null,
+          reporting_to: $("us-r1").value || null,
+          reporting_to_2: $("us-r2").value || null,
+          reporting_to_3: $("us-r3").value || null,
+          active: $("us-active").checked
+        };
+
+        $("us-save").disabled = true;
+        setMsg(msg, "Saving…", true);
+        var r;
+        if (u) {
+          r = await sb.from("profiles").update(profile).eq("id", u.id);
+          if (r.error) { $("us-save").disabled = false; setMsg(msg, saveError(r.error)); return; }
+        } else {
+          var mobile = $("us-mobile").value.replace(/\D/g, "");
+          if (mobile.length !== 10) { $("us-save").disabled = false; setMsg(msg, "Mobile must be 10 digits"); return; }
+          if ($("us-pass").value.length < 6) { $("us-save").disabled = false; setMsg(msg, "Password must be at least 6 characters"); return; }
+          profile.phone = mobile;
+          r = await adminCall({ action: "create_user", username: mobile, password: $("us-pass").value, profile: profile });
+          if (r.error) { $("us-save").disabled = false; setMsg(msg, r.error); return; }
+        }
+        $("us-save").disabled = false;
+        closeModal();
+        setMsg($("us-msg"), u ? "Saved" : "Staff created — they can sign in with their mobile number", true);
+        load();
+      });
+    }
+
+    // ---------- Export / template / bulk import ----------
+    var IMPORT_COLS = ["name", "mobile", "staff_id", "email", "login_role", "permission_role",
+                       "department", "designation", "unit", "schedule",
+                       "report1_mobile", "report2_mobile", "report3_mobile", "active"];
+
+    function exportCsv() {
+      var out = [IMPORT_COLS].concat(visible().map(function (u) {
+        return [u.name, u.username, u.emp_code || "", u.email || "", u.role,
+                nameOf("roles", u.role_id), nameOf("departments", u.department_id),
+                nameOf("designations", u.designation_id), nameOf("locations", u.location_id),
+                nameOf("shifts", u.shift_id),
+                byId[u.reporting_to] ? byId[u.reporting_to].username : "",
+                byId[u.reporting_to_2] ? byId[u.reporting_to_2].username : "",
+                byId[u.reporting_to_3] ? byId[u.reporting_to_3].username : "",
+                u.active ? "yes" : "no"];
+      }));
+      download("staff-" + today() + ".csv", toCsv(out));
+    }
+
+    function template() {
+      download("staff-import-template.csv", toCsv([
+        IMPORT_COLS.concat(["password"]),
+        ["Suresh S", "9965028707", "CT002", "suresh@carloo.in", "staff", "Executive",
+         "HRD", "HR Manager", "Carloo HO", "HO Staff", "9894021299", "", "", "yes", "Start@123"]
+      ]));
+    }
+
+    function importDialog() {
+      openModal("Bulk import staff",
+        '<div class="form-grid">' +
+          '<p class="hint">Each row creates a <b>login</b>, so <b>name</b>, <b>mobile</b> ' +
+            '(10 digits) and <b>password</b> are required. Department, designation, unit, ' +
+            'schedule and permission role are matched <b>by name</b> and must already exist. ' +
+            'Reports are matched by <b>mobile number</b>. Mobiles that already have a login ' +
+            'are skipped. Use <b>Template</b> for the exact columns.</p>' +
+          '<input class="txt" id="us-file" type="file" accept=".csv,text/csv">' +
+          '<div id="us-preview"></div>' +
+          '<div class="msg" id="us-imsg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="us-icancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="us-igo" type="button" disabled>Import</button>' +
+          '</div>' +
+        '</div>');
+
+      var pending = [];
+      $("us-icancel").addEventListener("click", closeModal);
+
+      function lookup(list, name) {
+        if (!name) return null;
+        var hit = lists[list].filter(function (x) {
+          return x.name.toLowerCase() === String(name).trim().toLowerCase();
+        })[0];
+        return hit ? hit.id : null;
+      }
+      function byMobile(m) {
+        var d = String(m || "").replace(/\D/g, "");
+        if (!d) return null;
+        var hit = staff.filter(function (x) { return x.username === d; })[0];
+        return hit ? hit.id : null;
+      }
+
+      $("us-file").addEventListener("change", function () {
+        var f = this.files && this.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var grid = parseCsv(String(reader.result));
+          if (!grid.length) { setMsg($("us-imsg"), "That file is empty"); return; }
+          var head = grid[0].map(function (h) { return h.trim().toLowerCase(); });
+          var col = function (r, k) { var i = head.indexOf(k); return i === -1 ? "" : (r[i] || "").trim(); };
+          if (head.indexOf("name") === -1 || head.indexOf("mobile") === -1) {
+            setMsg($("us-imsg"), 'The file needs at least "name" and "mobile" columns'); return;
+          }
+
+          var taken = {}, problems = [], seen = {};
+          staff.forEach(function (x) { taken[x.username] = true; });
+          pending = [];
+          grid.slice(1).forEach(function (r, i) {
+            var line = i + 2;
+            var name = col(r, "name");
+            var mobile = col(r, "mobile").replace(/\D/g, "");
+            var pass = col(r, "password");
+            if (!name && !mobile) return;
+            if (!name) { problems.push("line " + line + ": no name"); return; }
+            if (mobile.length !== 10) { problems.push("line " + line + ": mobile must be 10 digits"); return; }
+            if (taken[mobile] || seen[mobile]) { problems.push("line " + line + ": " + mobile + " already has a login"); return; }
+            if (pass.length < 6) { problems.push("line " + line + ": password must be at least 6 characters"); return; }
+            seen[mobile] = true;
+
+            var role = col(r, "login_role").toLowerCase();
+            pending.push({
+              username: mobile,
+              password: pass,
+              profile: {
+                name: name,
+                phone: mobile,
+                role: LOGIN_ROLES.indexOf(role) === -1 ? "staff" : role,
+                emp_code: col(r, "staff_id") || null,
+                email: col(r, "email") || null,
+                role_id: lookup("roles", col(r, "permission_role")),
+                department_id: lookup("departments", col(r, "department")),
+                designation_id: lookup("designations", col(r, "designation")),
+                location_id: lookup("locations", col(r, "unit")),
+                shift_id: lookup("shifts", col(r, "schedule")),
+                reporting_to: byMobile(col(r, "report1_mobile")),
+                reporting_to_2: byMobile(col(r, "report2_mobile")),
+                reporting_to_3: byMobile(col(r, "report3_mobile")),
+                active: head.indexOf("active") === -1 ? true : truthy(col(r, "active"))
+              }
+            });
+          });
+
+          $("us-preview").innerHTML = '<div class="panel state" style="padding:14px;text-align:left">' +
+            '<b>' + pending.length + '</b> to create' +
+            (problems.length ? ' · <b>' + problems.length + '</b> skipped' : '') +
+            (problems.length ? '<br><span class="hint">' + esc(problems.slice(0, 6).join("; ")) +
+              (problems.length > 6 ? "; …" : "") + '</span>' : '') +
+            '</div>';
+          setMsg($("us-imsg"), "");
+          $("us-igo").disabled = pending.length === 0;
+        };
+        reader.readAsText(f);
+      });
+
+      $("us-igo").addEventListener("click", async function () {
+        if (!pending.length) return;
+        $("us-igo").disabled = true;
+        setMsg($("us-imsg"), "Creating " + pending.length + " logins… this can take a moment", true);
+        var r = await adminCall({ action: "create_many", users: pending });
+        if (r.error) { $("us-igo").disabled = false; setMsg($("us-imsg"), r.error); return; }
+        closeModal();
+        var failed = (r.failed || []).length;
+        setMsg($("us-msg"),
+          "Created " + r.created + (failed ? " · " + failed + " failed: " +
+            r.failed.slice(0, 3).map(function (x) { return x.username + " (" + x.error + ")"; }).join("; ") : ""),
+          !failed);
         load();
       });
     }

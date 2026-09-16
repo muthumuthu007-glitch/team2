@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.8.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.9.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -63,6 +63,7 @@ set in type (Calibri) — swap in the real logo file when there is one.
 | **Designation** | Same screen as Department, different table. |
 | **Role** | Name, description, **Full access** (bypasses the matrix) and active, with Export / Import / template. Stored in `team2.roles`. |
 | **Permissions** | The role × menu matrix (v0.8.0) — see below. |
+| **User Master** | Staff table (v0.9.0): name, staff ID, mobile, role, department, designation, Report 1/2/3, **Unit**, schedule, status. Search by name/mobile/staff ID, six filters, a result count, Add staff, Edit, Set password, Activate/Deactivate, Export, Template and Bulk import. No Rate/Km column. |
 | **Schedule** | Was "Shift". Name, day check-in/out, three tea breaks (window + minutes), lunch (window + minutes) and permission hours per 26-day month. Shows how many staff are on each schedule, with an **In use only** filter, plus Export / Template / Import. Stored in `team2.shifts`. |
 
 Department and Designation share one `simpleMaster(host, cfg)` function — another
@@ -252,9 +253,18 @@ General shift). Its password was set directly on the database and is not recorde
 here. To create more logins by hand, or to reset this one, the SQL is at the
 bottom of `db/06_expose_and_seed.sql`.
 
-Note the same limit Asset hit: **creating logins from inside the app needs the
-service-role key**, which cannot live in a browser app. The User Master menu will
-need an edge function before it can create users.
+**Creating logins goes through the  edge function** (v0.9.0) — see
+`supabase/functions/team2-admin/README.md`. A browser cannot hold the service-role
+key, so the function does it and re-checks that the caller is an active Team2 admin.
+Verified: calls with no token, a bogus token and the publishable key are all rejected
+with 401 and create nothing.
+
+**Staff are never deleted** — User Master offers Activate/Deactivate instead.
+Deleting a profile would cascade and take that person's attendance, leave and visit
+history with it.
+
+**Report 1 is the only level that grants visibility.** `reporting_to` is what
+`team2.in_my_team()` walks; `reporting_to_2`/`_3` are escalation contacts only.
 
 ---
 
