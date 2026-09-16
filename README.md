@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.9.3 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.9.5 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -106,10 +106,22 @@ registered in `integrations.config.templates` and shown as previews in Settings:
 The bodies are stored word for word as approved (including "Thanks you") — a send
 must match the approved template, so do not "correct" them.
 
-**Sending is not built yet:** `whatapp.in` has no DNS record, so its API address and
-request format are unconfirmed. The sender will be written once the provider's API
-documentation (endpoint, auth header, how variables are passed) is supplied. Sends will
-be logged to `team2.whatsapp_log`.
+The provider is **whatapi.in** (Team2's own account). Each template gets a **webhook
+link** from the whatapi.in panel; paste it into the box under the template in Settings and
+**Send test** works. Sending goes through the `team2-whatsapp` edge function — see
+`supabase/functions/team2-whatsapp/README.md`. Webhook links are send credentials, stored
+admin-only in `integrations.secret.webhooks`.
+
+### SMS (v0.9.5)
+
+SMV SMS gateway, DLT-registered: sender **CARLOO**, entity `1701178236966573485`, route 1.
+One template, **OTP SMS** (`Otp Sms`, DLT template `1707178402149487842`):
+
+> Your Verification code is {#var#}. It is valid for 10 minutes, Do not share it with anyone - CARLOO
+
+Settings › SMS shows it with a **Send test SMS** panel and the last 10 sends. Sending goes
+through the `team2-sms` edge function. **The gateway is http-only**, so the key is
+unencrypted between our server and SMV — worth asking them for https.
 
 Settings saves now **merge** into the stored config, so fields the form does not show
 (the templates) are never wiped by a Save.

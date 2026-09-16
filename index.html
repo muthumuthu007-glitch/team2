@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.3",
+    version: "0.9.5",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -329,6 +329,17 @@
   .wa-var { background: #fff3c4; border-radius: 4px; padding: 0 3px; font-weight: 600; }
   .wa-btn { border-top: 1px solid #c9dcb4; padding: 8px 10px; text-align: center; color: #2f6fd0; font-weight: 600; }
   .wa-meta { padding: 9px 12px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+  .wa-tools { padding: 10px 12px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 9px; }
+  .wa-tools .txt { padding: 9px 11px; font-size: 13.5px; }
+  .wa-tools .field label { font-size: 10px; }
+  .wa-vars { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .wa-log { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .wa-log th, .wa-log td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .wa-log th { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .wa-ok { color: var(--ok); font-weight: 600; }
+  .sms-bubble { background: #f1f3f7; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.45; color: #111; }
+  .sms-var { background: #fff3c4; border-radius: 4px; padding: 0 3px; font-weight: 600; }
+  .wa-bad { color: var(--error); font-weight: 600; }
 
   /* ---------- Permission matrix ---------- */
   .matrix-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: #fff; }
@@ -1202,12 +1213,14 @@
   // Everything else is a plain table write, guarded by RLS.
   var LOGIN_ROLES = ["staff", "manager", "admin", "superadmin"];
 
-  async function adminCall(payload) {
+  function adminCall(payload) { return fnCall("team2-admin", payload); }
+
+  async function fnCall(fn, payload) {
     var ses = await sb.auth.getSession();
     var token = ses.data.session && ses.data.session.access_token;
     if (!token) return { error: "Your session expired — sign in again" };
     try {
-      var res = await fetch(CFG.url + "/functions/v1/team2-admin", {
+      var res = await fetch(CFG.url + "/functions/v1/" + fn, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
         body: JSON.stringify(payload)
@@ -1848,7 +1861,9 @@
     },
     {
       provider: "sms", icon: "list", title: "SMS settings",
-      note: "Indian senders need a DLT-registered header and entity ID, or the operator rejects the message.",
+      note: "Indian senders need a DLT-registered header, entity ID and template, or the operator rejects " +
+            "the message. The text sent is always the registered template with its values filled in.",
+      smsTemplates: true,
       config: [
         { k: "provider_name",  label: "Provider", ph: "e.g. MSG91, TextLocal" },
         { k: "api_url",        label: "API base URL" },
@@ -1893,7 +1908,16 @@
   }
 
   // WhatsApp-style preview of an approved template, placeholders highlighted.
-  function renderWaTemplates(host, templates) {
+  // Accepts the whole webhook link or just its id.
+  function webhookIdOf(v) {
+    v = String(v || "").trim();
+    var m = /webhook\.whatapi\.in\/webhook\/([A-Za-z0-9_-]+)/i.exec(v);
+    if (m) return m[1];
+    return /^[A-Za-z0-9_-]{8,}$/.test(v) ? v : null;
+  }
+
+  function renderWaTemplates(host, templates, hooks) {
+    hooks = hooks || {};
     var keys = Object.keys(templates);
     if (!keys.length) { host.innerHTML = '<div class="hint">No templates registered.</div>'; return; }
     host.innerHTML = keys.map(function (k) {
@@ -1911,8 +1935,147 @@
           ' · ' + (t.variables || 0) + ' placeholder' + (t.variables === 1 ? "" : "s") +
           (t.header === "image" ? ' · image header' : '') +
           (t.expiry_minutes ? ' · expires in ' + t.expiry_minutes + ' min' : '') +
+        '</div>' +
+        '<div class="wa-tools">' +
+          '<div class="field"><label for="wa-hook-' + k + '">Webhook link ' +
+            '<span class="saved-tag">' + (hooks[k] ? "· saved" : "· not set") + '</span></label>' +
+            '<input class="txt" id="wa-hook-' + k + '" type="text" autocomplete="off" ' +
+              'placeholder="https://webhook.whatapi.in/webhook/…"></div>' +
+          '<span class="sec-title">Send a test</span>' +
+          '<input class="txt" id="wa-to-' + k + '" type="tel" inputmode="numeric" autocomplete="off" ' +
+            'placeholder="Mobile, e.g. 9894021299">' +
+          '<div class="wa-vars">' +
+            Array.from({ length: t.variables || 0 }, function (_, i) {
+              return '<input class="txt" id="wa-v' + (i + 1) + '-' + k + '" type="text" autocomplete="off" ' +
+                'placeholder="{{' + (i + 1) + '}}' + (k === "otp" ? " — code" : "") + '">';
+            }).join("") +
+          '</div>' +
+          (t.header === "image"
+            ? '<input class="txt" id="wa-img-' + k + '" type="url" autocomplete="off" placeholder="Image link (https://…)">'
+            : '') +
+          '<button class="go compact" id="wa-send-' + k + '" type="button">Send test</button>' +
+          '<div class="msg" id="wa-msg-' + k + '" style="text-align:left"></div>' +
         '</div></div>';
     }).join("");
+
+    // Pre-fill a random code for the OTP test so it looks like the real thing.
+    if ($("wa-v1-otp")) $("wa-v1-otp").value = String(Math.floor(100000 + Math.random() * 900000));
+
+    keys.forEach(function (k) {
+      var t = templates[k] || {};
+      var btn = $("wa-send-" + k);
+      if (!btn) return;
+      btn.addEventListener("click", async function () {
+        var msg = $("wa-msg-" + k);
+        var vars = Array.from({ length: t.variables || 0 }, function (_, i) {
+          return ($("wa-v" + (i + 1) + "-" + k).value || "").trim();
+        });
+        if (!$("wa-to-" + k).value.trim()) { setMsg(msg, "Enter a mobile number"); return; }
+        if (vars.some(function (v) { return !v; })) { setMsg(msg, "Fill every placeholder"); return; }
+        if (vars.some(function (v) { return v.indexOf(",") !== -1; })) {
+          setMsg(msg, "Values cannot contain commas"); return;
+        }
+        btn.disabled = true;
+        setMsg(msg, "Sending…", true);
+        var r = await fnCall("team2-whatsapp", {
+          action: "send", template: k, to: $("wa-to-" + k).value,
+          vars: vars, medialink: $("wa-img-" + k) ? $("wa-img-" + k).value.trim() : ""
+        });
+        btn.disabled = false;
+        if (r.error) { setMsg(msg, "Not sent — " + r.error); }
+        else { setMsg(msg, "Sent to " + r.to + (r.provider_ref ? " · ref " + r.provider_ref : ""), true); }
+        if (renderWaTemplates.reloadLog) renderWaTemplates.reloadLog();
+      });
+    });
+  }
+
+  // DLT SMS templates: preview, then a test send that fills {#var#}.
+  function renderSmsTemplates(host, templates) {
+    var keys = Object.keys(templates);
+    if (!keys.length) { host.innerHTML = '<div class="hint">No SMS templates registered.</div>'; return; }
+    host.innerHTML = keys.map(function (k) {
+      var t = templates[k] || {};
+      var slots = (String(t.body || "").match(/\{#var#\}/g) || []).length;
+      var body = esc(t.body || "").replace(/\{#var#\}/g, '<span class="sms-var">{#var#}</span>');
+      return '<div class="wa-card">' +
+        '<div class="wa-card-head"><b>' + esc(t.label || k) + '</b>' +
+          '<span>' + esc(t.name || "") + ' · DLT template ' + esc(t.template_id || "—") + '</span></div>' +
+        '<div class="wa-stage" style="background:#fff"><div class="sms-bubble">' + body + '</div></div>' +
+        '<div class="wa-meta">' + esc(t.purpose || "") + ' · ' + slots + ' placeholder' + (slots === 1 ? "" : "s") +
+          (t.expiry_minutes ? ' · valid ' + t.expiry_minutes + ' min' : '') + '</div>' +
+        '<div class="wa-tools">' +
+          '<span class="sec-title">Send a test</span>' +
+          '<input class="txt" id="sms-to-' + k + '" type="tel" inputmode="numeric" autocomplete="off" placeholder="Mobile, e.g. 9894021299">' +
+          '<div class="wa-vars">' +
+            Array.from({ length: slots }, function (_, i) {
+              return '<input class="txt" id="sms-v' + (i + 1) + '-' + k + '" type="text" maxlength="30" autocomplete="off" ' +
+                'placeholder="{#var#} ' + (i + 1) + '">';
+            }).join("") +
+          '</div>' +
+          '<button class="go compact" id="sms-send-' + k + '" type="button">Send test SMS</button>' +
+          '<div class="msg" id="sms-msg-' + k + '" style="text-align:left"></div>' +
+        '</div></div>';
+    }).join("");
+
+    keys.forEach(function (k) {
+      var t = templates[k] || {};
+      var slots = (String(t.body || "").match(/\{#var#\}/g) || []).length;
+      // An OTP template gets a realistic code pre-filled.
+      if (/otp/i.test(k + " " + (t.name || "")) && $("sms-v1-" + k)) {
+        $("sms-v1-" + k).value = String(Math.floor(100000 + Math.random() * 900000));
+      }
+      var btn = $("sms-send-" + k);
+      btn.addEventListener("click", async function () {
+        var msg = $("sms-msg-" + k);
+        var to = $("sms-to-" + k).value.replace(/\D/g, "");
+        if (to.length === 12 && to.indexOf("91") === 0) to = to.slice(2);
+        if (!/^[6-9]\d{9}$/.test(to)) { setMsg(msg, "Enter a valid 10-digit mobile number"); return; }
+        var vars = Array.from({ length: slots }, function (_, i) {
+          return ($("sms-v" + (i + 1) + "-" + k).value || "").trim();
+        });
+        if (vars.some(function (v) { return !v; })) { setMsg(msg, "Fill every placeholder"); return; }
+        btn.disabled = true;
+        setMsg(msg, "Sending…", true);
+        var r = await fnCall("team2-sms", { action: "send", template: k, to: to, vars: vars });
+        btn.disabled = false;
+        if (r.error) setMsg(msg, "Not sent — " + r.error);
+        else setMsg(msg, "Accepted by the gateway for " + r.to + (r.reply ? " — reply: " + r.reply : ""), true);
+        if (renderSmsTemplates.reloadLog) renderSmsTemplates.reloadLog();
+      });
+    });
+  }
+
+  async function renderSmsLog(host) {
+    var r = await sb.from("sms_log")
+      .select("created_at, template, to_number, status, error, provider_reply")
+      .order("created_at", { ascending: false }).limit(10);
+    if (r.error) { host.innerHTML = '<div class="hint">Could not load the SMS log.</div>'; return; }
+    if (!r.data || !r.data.length) { host.innerHTML = '<div class="hint">Nothing sent yet.</div>'; return; }
+    host.innerHTML = '<div style="overflow-x:auto"><table class="wa-log"><thead><tr>' +
+      '<th>When</th><th>Template</th><th>To</th><th>Result</th></tr></thead><tbody>' +
+      r.data.map(function (x) {
+        return '<tr><td>' + esc(new Date(x.created_at).toLocaleString("en-IN")) + '</td>' +
+          '<td>' + esc(x.template) + '</td><td>' + esc(x.to_number) + '</td>' +
+          '<td>' + (x.status === "sent"
+            ? '<span class="wa-ok">Accepted</span> ' + esc(x.provider_reply || "")
+            : '<span class="wa-bad">Failed</span> ' + esc(x.error || "")) + '</td></tr>';
+      }).join("") + '</tbody></table></div>';
+  }
+
+  // Last sends, newest first — every attempt is logged by the edge function.
+  async function renderWaLog(host) {
+    var r = await sb.from("whatsapp_log")
+      .select("created_at, template, to_number, status, error").order("created_at", { ascending: false }).limit(10);
+    if (r.error) { host.innerHTML = '<div class="hint">Could not load the send log.</div>'; return; }
+    if (!r.data || !r.data.length) { host.innerHTML = '<div class="hint">Nothing sent yet.</div>'; return; }
+    host.innerHTML = '<div style="overflow-x:auto"><table class="wa-log"><thead><tr>' +
+      '<th>When</th><th>Template</th><th>To</th><th>Result</th></tr></thead><tbody>' +
+      r.data.map(function (x) {
+        return '<tr><td>' + esc(new Date(x.created_at).toLocaleString("en-IN")) + '</td>' +
+          '<td>' + esc(x.template) + '</td><td>' + esc(x.to_number) + '</td>' +
+          '<td>' + (x.status === "sent" ? '<span class="wa-ok">Sent</span>'
+                                        : '<span class="wa-bad">Failed</span> ' + esc(x.error || "")) + '</td></tr>';
+      }).join("") + '</tbody></table></div>';
   }
 
   function renderSettings(host) {
@@ -1957,7 +2120,16 @@
           (it.templates ? '<div class="sec"><span class="sec-title">Approved templates</span>' +
             '<div class="wa-grid" id="set-' + it.provider + '-templates"><div class="hint">Loading…</div></div>' +
             '<span class="sec-note">These match the templates approved on the WhatsApp account word for word, ' +
-            'including their wording — a send must fill exactly these placeholders.</span></div>' : '') +
+            'including their wording — a send must fill exactly these placeholders. Webhook links are ' +
+            'send credentials: they are stored admin-only and only ever used by the server.</span>' +
+            '<span class="sec-title">Recent sends</span>' +
+            '<div id="set-' + it.provider + '-log"><div class="hint">Loading…</div></div></div>' : '') +
+          (it.smsTemplates ? '<div class="sec"><span class="sec-title">DLT templates</span>' +
+            '<div class="wa-grid" id="set-' + it.provider + '-templates"><div class="hint">Loading…</div></div>' +
+            '<span class="sec-note">This gateway only answers over plain http, so the API key travels ' +
+            'unencrypted between our server and the gateway. It never reaches a browser.</span>' +
+            '<span class="sec-title">Recent sends</span>' +
+            '<div id="set-' + it.provider + '-log"><div class="hint">Loading…</div></div></div>' : '') +
           '<label class="chk"><input type="checkbox" id="set-' + it.provider + '-enabled"> Enabled</label>' +
           '<div class="msg" id="set-' + it.provider + '-msg"></div>' +
           '<div class="modal-acts">' +
@@ -2023,7 +2195,17 @@
           if (tag) tag.textContent = row.secret && row.secret[f.k] ? "· saved" : "";
         });
         $("set-" + it.provider + "-enabled").checked = !!row.enabled;
-        if (it.templates) renderWaTemplates($("set-" + it.provider + "-templates"), (row.config || {}).templates || {});
+        if (it.smsTemplates) {
+          renderSmsTemplates($("set-" + it.provider + "-templates"), (row.config || {}).templates || {});
+          renderSmsTemplates.reloadLog = function () { renderSmsLog($("set-" + it.provider + "-log")); };
+          renderSmsTemplates.reloadLog();
+        }
+        if (it.templates) {
+          renderWaTemplates($("set-" + it.provider + "-templates"),
+                            (row.config || {}).templates || {}, (row.secret || {}).webhooks || {});
+          renderWaTemplates.reloadLog = function () { renderWaLog($("set-" + it.provider + "-log")); };
+          renderWaTemplates.reloadLog();
+        }
 
         $("set-" + it.provider + "-save").addEventListener("click", async function () {
           var msg = $("set-" + it.provider + "-msg");
@@ -2037,6 +2219,18 @@
           });
           // Keep any secret that was not retyped; blanks never wipe a stored value.
           var secret = Object.assign({}, row.secret || {});
+          if (it.templates) {
+            var hooks = Object.assign({}, secret.webhooks || {});
+            var bad = null;
+            Object.keys((row.config || {}).templates || {}).forEach(function (k) {
+              var el = $("wa-hook-" + k);
+              if (!el || !el.value.trim()) return;
+              var id = webhookIdOf(el.value);
+              if (!id) bad = k; else hooks[k] = id;
+            });
+            if (bad) { setMsg(msg, 'That is not a whatapi.in webhook link (' + bad + ')'); return; }
+            secret.webhooks = hooks;
+          }
           it.secret.forEach(function (f) {
             var el = $("set-" + it.provider + "-" + f.k);
             if (el && el.value) secret[f.k] = el.value;
@@ -2051,6 +2245,9 @@
           $("set-" + it.provider + "-save").disabled = false;
           if (up.error) { setMsg(msg, saveError(up.error)); return; }
           row.config = config; row.secret = secret;
+          if (it.templates) {
+            renderWaTemplates($("set-" + it.provider + "-templates"), config.templates || {}, secret.webhooks || {});
+          }
           it.secret.forEach(function (f) {
             var el = $("set-" + it.provider + "-" + f.k);
             if (el) el.value = "";
