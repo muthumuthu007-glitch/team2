@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.7",
+    version: "0.9.8",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -625,7 +625,8 @@
       roles: ["superadmin", "admin", "manager"] },
 
     { group: "Masters", id: "parties",         label: "Customer / Site", desc: "Who the team visits",    icon: "building" },
-    { group: "Masters", id: "visit_purposes",  label: "Visit Purpose",   desc: "Reasons for a visit",    icon: "tag" },
+    { group: "Masters", id: "visit_purposes",  label: "Visit Purpose",   desc: "Reasons for a visit",    icon: "tag",
+      render: function (h) { simpleMaster(h, VISIT_PURPOSES_M); } },
     { group: "Masters", id: "locations",       label: "Unit",            desc: "Units, addresses &amp; geofences", icon: "map",
       render: function (h) { renderUnits(h); } },
     { group: "Masters", id: "departments",     label: "Department",      desc: "Departments",            icon: "grid",
@@ -950,6 +951,11 @@
     menuId: "designations", table: "designations", codeField: "designation_code",
     one: "designation", title: "Designation",
     placeholder: "e.g. Supervisor", sample: ["Supervisor", "Operator", "Executive"]
+  };
+  var VISIT_PURPOSES_M = {
+    menuId: "visit_purposes", table: "visit_purposes", codeField: "purpose_code",
+    one: "visit purpose", title: "Visit purpose",
+    placeholder: "e.g. Sales Call", sample: ["Sales Call", "Service Visit", "Collection"]
   };
   // Roles carry two extra columns, so the same screen takes an `extra` list.
   var ROLES_M = {
@@ -1874,7 +1880,7 @@
       secret: [{ k: "api_key", label: "API key" }]
     },
     {
-      provider: "email", icon: "chart", title: "Email — automatic reports",
+      provider: "email", icon: "chart", title: "Email — automatic reports", emailTest: true,
       note: "Used to mail the daily reports. The SMTP password is stored admin-only.",
       config: [
         { k: "smtp_host",  label: "Outgoing server (SMTP)", ph: "smtp3.netcore.co.in" },
@@ -2047,6 +2053,22 @@
     });
   }
 
+  async function renderEmailLog(host) {
+    var r = await sb.from("email_log")
+      .select("created_at, kind, to_address, status, error")
+      .order("created_at", { ascending: false }).limit(10);
+    if (r.error) { host.innerHTML = '<div class="hint">Could not load the email log.</div>'; return; }
+    if (!r.data || !r.data.length) { host.innerHTML = '<div class="hint">Nothing sent yet.</div>'; return; }
+    host.innerHTML = '<div style="overflow-x:auto"><table class="wa-log"><thead><tr>' +
+      '<th>When</th><th>Type</th><th>To</th><th>Result</th></tr></thead><tbody>' +
+      r.data.map(function (x) {
+        return '<tr><td>' + esc(new Date(x.created_at).toLocaleString("en-IN")) + '</td>' +
+          '<td>' + esc(x.kind) + '</td><td>' + esc(x.to_address) + '</td>' +
+          '<td>' + (x.status === "sent" ? '<span class="wa-ok">Sent</span>'
+                                        : '<span class="wa-bad">Failed</span> ' + esc(x.error || "")) + '</td></tr>';
+      }).join("") + '</tbody></table></div>';
+  }
+
   async function renderSmsLog(host) {
     var r = await sb.from("sms_log")
       .select("created_at, template, to_number, status, error, provider_reply")
@@ -2132,6 +2154,16 @@
             'unencrypted between our server and the gateway. It never reaches a browser.</span>' +
             '<span class="sec-title">Recent sends</span>' +
             '<div id="set-' + it.provider + '-log"><div class="hint">Loading…</div></div></div>' : '') +
+          (it.emailTest ? '<div class="sec"><span class="sec-title">Send a test</span>' +
+            '<div class="map-tools">' +
+              '<input class="txt" id="em-to" type="email" autocomplete="off" placeholder="Send to, e.g. mms@carloo.in" style="flex:1 1 220px">' +
+              '<button class="go compact" id="em-send" type="button">Send test email</button>' +
+            '</div>' +
+            '<div class="msg" id="em-msg" style="text-align:left"></div>' +
+            '<span class="sec-note">Save first if you changed anything above — the test uses the stored settings. ' +
+              'Mail goes out on port 465; ports 25 and 587 are blocked for outgoing mail on our server.</span>' +
+            '<span class="sec-title">Recent sends</span>' +
+            '<div id="em-log"><div class="hint">Loading…</div></div></div>' : '') +
           '<label class="chk"><input type="checkbox" id="set-' + it.provider + '-enabled"> Enabled</label>' +
           '<div class="msg" id="set-' + it.provider + '-msg"></div>' +
           '<div class="modal-acts">' +
@@ -2197,6 +2229,22 @@
           if (tag) tag.textContent = row.secret && row.secret[f.k] ? "· saved" : "";
         });
         $("set-" + it.provider + "-enabled").checked = !!row.enabled;
+        if (it.emailTest) {
+          $("em-to").value = (row.config || {}).username || "";
+          var emLog = function () { renderEmailLog($("em-log")); };
+          emLog();
+          $("em-send").addEventListener("click", async function () {
+            var to = $("em-to").value.trim();
+            if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(to)) { setMsg($("em-msg"), "Enter one valid email address"); return; }
+            $("em-send").disabled = true;
+            setMsg($("em-msg"), "Sending… this can take up to 30 seconds", true);
+            var r = await fnCall("team2-email", { action: "send_test", to: to });
+            $("em-send").disabled = false;
+            if (r.error) setMsg($("em-msg"), "Not sent — " + r.error);
+            else setMsg($("em-msg"), "Sent to " + r.to + ". Check the inbox (and spam folder).", true);
+            emLog();
+          });
+        }
         if (it.smsTemplates) {
           renderSmsTemplates($("set-" + it.provider + "-templates"), (row.config || {}).templates || {});
           renderSmsTemplates.reloadLog = function () { renderSmsLog($("set-" + it.provider + "-log")); };

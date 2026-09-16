@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.9.6 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.9.8 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -61,6 +61,7 @@ set in type (Calibri) — swap in the real logo file when there is one.
 | **Unit** | Name, address (Google Places search), city, pincode, active. Geofence is a **circle** (drag it, or set a radius) or a **polygon** you draw by clicking corners on the map, plus a **buffer** in metres. Stored in `team2.locations`. |
 | **Department** | Name + active, with **Export**, **Import** and a downloadable import template. |
 | **Designation** | Same screen as Department, different table. |
+| **Visit Purpose** | Same screen again (v0.9.8), `team2.visit_purposes` — six starter purposes were seeded. |
 | **Role** | Name, description, **Full access** (bypasses the matrix) and active, with Export / Import / template. Stored in `team2.roles`. |
 | **Permissions** | The role × menu matrix (v0.8.0) — see below. |
 | **User Master** | Staff table (v0.9.0): name, staff ID, mobile, role, department, designation, Report 1/2/3, **Unit**, schedule, status. Search by name/mobile/staff ID, six filters, a result count, Add staff, Edit, Set password, Activate/Deactivate, Export, Template and Bulk import. No Rate/Km column. |
@@ -139,7 +140,8 @@ connecting, not guessed:
 Both carry the same `ncismum` platform prefix. **Not** `mail.carloo.in` — it resolves but
 answers on no port at all. **Not** `smtps.netcore.co.in` — that is Netcore Cloud's separate
 bulk-mail product. The password is entered by the user in Settings; email stays switched
-off until they tick Enabled. No email sender is built yet.
+off until they tick Enabled. **Send test email** (v0.9.8) goes through the `team2-email`
+edge function on port 465 and logs to `team2.email_log`.
 
 **Nothing sends yet.** A browser cannot hold a sending credential safely, so WhatsApp,
 SMS and email delivery each need an edge function. The screen says so.
