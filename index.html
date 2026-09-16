@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.0",
+    version: "0.9.1",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -45,6 +45,7 @@
     --pad: max(14px, env(safe-area-inset-left));
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* beats .map-tools { display: flex } etc. */
   html, body { height: 100%; }
   body {
     background: var(--bg);
@@ -1897,7 +1898,10 @@
         '<div class="field"><label for="set-gmaps">Google Maps browser key</label>' +
           '<input class="txt" id="set-gmaps" type="text" placeholder="AIza…" autocomplete="off"></div>' +
         '<div class="msg" id="set-gmaps-msg"></div>' +
-        '<div class="modal-acts"><button class="go compact" id="set-gmaps-save" type="button">Save key</button></div>' +
+        '<div class="modal-acts">' +
+          '<button class="mini" id="set-gmaps-test" type="button">Test key</button>' +
+          '<button class="go compact" id="set-gmaps-save" type="button">Save key</button>' +
+        '</div>' +
       '</div>' +
 
       INTEGRATIONS.map(function (it) {
@@ -1934,7 +1938,27 @@
       $("set-gmaps-save").disabled = false;
       if (r.error) { setMsg($("set-gmaps-msg"), saveError(r.error)); return; }
       SETTINGS.google_maps_key = v;
-      setMsg($("set-gmaps-msg"), v ? "Saved — reload the app to load the map." : "Key cleared.", true);
+      GMaps.reset();
+      setMsg($("set-gmaps-msg"), v ? "Saved. Use Test key, or reload the app." : "Key cleared.", true);
+    });
+
+    $("set-gmaps-test").addEventListener("click", async function () {
+      var box = $("set-gmaps-msg");
+      if (!$("set-gmaps").value.trim() && !GMaps.key()) { setMsg(box, "Enter a key first"); return; }
+      // Test what is typed, not only what was saved.
+      SETTINGS.google_maps_key = $("set-gmaps").value.trim() || SETTINGS.google_maps_key;
+      $("set-gmaps-test").disabled = true;
+      setMsg(box, "Testing…", true);
+      var maps = null, err = null;
+      try { maps = await GMaps.load(); } catch (e) { err = e; }
+      // The rejection arrives a moment after the script loads.
+      await new Promise(function (r) { setTimeout(r, 2000); });
+      $("set-gmaps-test").disabled = false;
+      if (maps && maps.Map && !GMaps.authFailed()) {
+        setMsg(box, "Key works — the map library loaded.", true);
+      } else {
+        setMsg(box, (err && err.message ? err.message + " — " : "") + GMaps.failureReason());
+      }
     });
 
     // ---- WhatsApp / SMS / email ----
@@ -2587,23 +2611,35 @@
   // polygon is drawn by hand: map clicks push vertices onto an editable Polygon.
   async function initUnitMap(st) {
     var box = $("uMap");
-    var maps;
+    var maps = null, loadErr = null;
     try { maps = await GMaps.load(); }
-    catch (e) { maps = null; }
+    catch (e) { loadErr = e; }
 
-    if (!maps) {
+    function mapOff(detail) {
       box.innerHTML = '<div class="map-off">' +
         '<b>Map not available</b>' +
-        '<span>No Google Maps key is set, so the geofence cannot be drawn yet. ' +
-        'Name, address and buffer still save.</span></div>';
+        '<span>' + esc(detail) + '</span>' +
+        '<span>Name, address and buffer still save.</span></div>';
+    }
+
+    if (!maps) {
+      mapOff(loadErr && loadErr.message ? loadErr.message + " \u2014 " + GMaps.failureReason()
+                                        : GMaps.failureReason());
       return;
     }
 
     var center = (st.lat != null && st.lng != null) ? { lat: st.lat, lng: st.lng } : UNIT_FALLBACK_CENTER;
-    st.map = new maps.Map(box, {
-      center: center, zoom: (st.lat != null ? 17 : 12),
-      mapTypeId: "hybrid", streetViewControl: false, fullscreenControl: false, mapTypeControl: true
-    });
+    try {
+      st.map = new maps.Map(box, {
+        center: center, zoom: (st.lat != null ? 17 : 12),
+        mapTypeId: "hybrid", streetViewControl: false, fullscreenControl: false, mapTypeControl: true
+      });
+    } catch (e) {
+      mapOff(e.message ? e.message : GMaps.failureReason());
+      return;
+    }
+    // Google reports a bad key asynchronously, after the map object exists.
+    setTimeout(function () { if (GMaps.authFailed()) mapOff(GMaps.failureReason()); }, 2500);
 
     var style = { fillColor: "#4169e1", fillOpacity: 0.12, strokeColor: "#4169e1", strokeWeight: 2 };
 
@@ -2667,6 +2703,11 @@
   // resolves to null when there is no key, so screens degrade to raw lat/lng.
   var GMaps = (function () {
     var loading = null;
+    var authFailed = false;
+
+    // Google calls this when it rejects the key — wrong referrer, API not enabled,
+    // or billing off. Without it the map is just a silent grey box.
+    window.gm_authFailure = function () { authFailed = true; };
 
     // The key comes from Settings (app_settings.google_maps_key) so it never has to
     // live in this file or in the repo. APP_CFG.gmapsKey still wins if it is set.
@@ -2682,7 +2723,21 @@
         s.src = "https://maps.googleapis.com/maps/api/js?key=" +
                 encodeURIComponent(key()) + "&libraries=places&loading=async";
         s.async = true;
-        s.onload = function () { resolve(window.google && window.google.maps ? window.google.maps : null); };
+        // With loading=async the bootstrap defines google.maps but NOT google.maps.Map;
+        // the library has to be imported before anything can be constructed.
+        s.onload = async function () {
+          try {
+            var g = window.google && window.google.maps;
+            if (g && g.importLibrary) {
+              await g.importLibrary("maps");
+              await g.importLibrary("places");
+            }
+            g = window.google && window.google.maps;
+            resolve(g && g.Map ? g : null);
+          } catch (err) {
+            reject(err);
+          }
+        };
         s.onerror = function () { reject(new Error("Google Maps failed to load")); };
         document.head.appendChild(s);
       });
@@ -2756,8 +2811,21 @@
       return r ? { km: r.distance.value / 1000, minutes: Math.round(r.duration.value / 60) } : null;
     }
 
+    // Why the map could not be shown, in words the person reading it can act on.
+    function failureReason() {
+      if (!key()) return "No Google Maps key is set. Add one in Admin \u203a Settings \u203a Google API.";
+      if (authFailed) {
+        return "Google rejected the key. Check, in the Google Cloud console: " +
+               "Maps JavaScript API is enabled, billing is on for the project, and the key\u2019s " +
+               "HTTP referrer restriction includes this site.";
+      }
+      return "The map could not start. Check the browser console for the Google error.";
+    }
+
     return { load: load, here: here, address: address, autocomplete: autocomplete, roadKm: roadKm,
-             key: key, enabled: function () { return !!key(); } };
+             key: key, enabled: function () { return !!key(); },
+             authFailed: function () { return authFailed; }, failureReason: failureReason,
+             reset: function () { loading = null; authFailed = false; } };
   })();
 
   window.Team2 = { sb: sb, GMaps: GMaps, me: function () { return me; } };
