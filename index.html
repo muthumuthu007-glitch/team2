@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.1",
+    version: "0.9.2",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -2554,6 +2554,7 @@
       $("uPolyRow").hidden = t !== "polygon";
       if (st.circle) st.circle.setMap(t === "circle" ? st.map : null);
       if (st.poly) st.poly.setMap(t === "polygon" ? st.map : null);
+      if (st.syncCursor) st.syncCursor();
     }
     setType(st.type);
 
@@ -2632,7 +2633,8 @@
     try {
       st.map = new maps.Map(box, {
         center: center, zoom: (st.lat != null ? 17 : 12),
-        mapTypeId: "hybrid", streetViewControl: false, fullscreenControl: false, mapTypeControl: true
+        mapTypeId: "hybrid", streetViewControl: false, fullscreenControl: false, mapTypeControl: true,
+        disableDoubleClickZoom: true
       });
     } catch (e) {
       mapOff(e.message ? e.message : GMaps.failureReason());
@@ -2655,7 +2657,9 @@
       st.lat = c.lat(); st.lng = c.lng();
     });
 
-    st.poly = new maps.Polygon(Object.assign({ map: null, paths: st.polygon, editable: true }, style));
+    // `paths` must be a list holding ONE path. `paths: []` means zero paths, and then
+    // getPath() is undefined — which silently broke drawing (checked against the live API).
+    st.poly = new maps.Polygon(Object.assign({ map: null, paths: [st.polygon], editable: true }, style));
     function syncPoly() {
       var path = st.poly.getPath();
       st.polygon = [];
@@ -2670,12 +2674,22 @@
     });
     syncPoly();
 
-    // A click drops a polygon corner, or moves the circle when none is set yet.
+    // A click drops a polygon corner, or moves the circle.
     st.map.addListener("click", function (e) {
       if (st.type === "polygon") { st.poly.getPath().push(e.latLng); return; }
       st.circle.setCenter(e.latLng);
       st.lat = e.latLng.lat(); st.lng = e.latLng.lng();
     });
+    st.poly.addListener("click", function (e) {
+      if (e.vertex != null || e.edge != null) return;   // dragging a handle, not adding
+      st.poly.getPath().push(e.latLng);
+    });
+
+    // Crosshair while drawing, so it is obvious a click will do something.
+    st.syncCursor = function () {
+      st.map.setOptions({ draggableCursor: st.type === "polygon" ? "crosshair" : null });
+    };
+    st.syncCursor();
 
     if ($("uUndo")) $("uUndo").addEventListener("click", function () {
       var path = st.poly.getPath();
