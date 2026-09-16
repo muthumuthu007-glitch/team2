@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.6.0 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.7.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -69,8 +69,24 @@ name-only master is a config plus a table, not new screen code. Import matches o
 file, ignores blank rows, and reports the counts before you commit. `code` in an
 imported file is ignored: codes are generated (`DEP-001`, `LOC-001`).
 
-**The Unit map needs a Google Maps key** — see below. Without one the form still
-saves name, address and buffer, and says so instead of showing a broken map.
+**Settings** (v0.7.0, admin only) holds four sections: **Google API** (the Maps
+browser key), **WhatsApp API**, **SMS settings** and **Email — automatic reports**.
+
+The Maps key is entered there, not in this file, so it never reaches the repo.
+`APP_CFG.gmapsKey` still wins if set. After saving a key, reload the app.
+
+**Where the credentials live, and why it matters:**
+
+| Stored in | Who can read it | What goes there |
+|---|---|---|
+| `team2.app_settings` | **every signed-in user** | Maps browser key, tracking interval, non-secret toggles |
+| `team2.integrations` | **admins only** (RLS `is_admin()` on ALL commands) | WhatsApp token, SMS API key, SMTP password |
+
+Never move a token into `app_settings` — ordinary staff can read that table through
+the API. Secret boxes show "· saved" and stay blank; typing replaces, blank keeps.
+
+**Nothing sends yet.** A browser cannot hold a sending credential safely, so WhatsApp,
+SMS and email delivery each need an edge function. The screen says so.
 
 **Note on `DrawingManager`:** Google removed it from the Maps JS API in 3.65, so
 the polygon is drawn by hand — map clicks push vertices onto an editable

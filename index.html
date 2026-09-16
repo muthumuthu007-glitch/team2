@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.6.0",
+    version: "0.7.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -301,6 +301,20 @@
   .form-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
   .time-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
   .sec-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .card-head .ic {
+    width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto;
+    background: var(--brand-soft); color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card-head h3 { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .set-card { display: flex; flex-direction: column; gap: 13px; margin-bottom: 14px; }
+  .banner {
+    border: 1px solid #f0dcc2; background: #fdf7ee; color: #7a5a22;
+    border-radius: 12px; padding: 13px 15px; font-size: 13px; line-height: 1.5; margin-bottom: 14px;
+  }
+  .banner b { color: #5d4416; }
+  .saved-tag { font-size: 11.5px; color: var(--ok); font-weight: 600; }
   .sec-note b { color: var(--ink); font-weight: 600; }
   .count-badge {
     display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
@@ -483,6 +497,7 @@
   var emailOf = function (u) { return u.toLowerCase() + "@team2.app"; };
 
   var me = null;        // signed-in profile row
+  var SETTINGS = {};    // team2.app_settings, readable by every signed-in user
   var myAccess = {};    // menu_id -> access level, from the permission matrix
 
   // ---------- Icons (24x24, stroked) ----------
@@ -555,8 +570,9 @@
       roles: ["superadmin", "admin"] },
     { group: "Admin", id: "permissions", label: "Permissions", desc: "What each role can do",   icon: "sliders",
       roles: ["superadmin", "admin"] },
-    { group: "Admin", id: "settings",    label: "Settings",    desc: "Tracking &amp; punch rules",  icon: "cog",
-      roles: ["superadmin", "admin"] }
+    { group: "Admin", id: "settings",    label: "Settings",    desc: "Integrations &amp; keys",     icon: "cog",
+      roles: ["superadmin", "admin"],
+      render: function (h) { renderSettings(h); } }
   ];
 
   var GROUP_ORDER = ["Daily", "Requests", "Masters", "Reports", "Admin"];
@@ -587,6 +603,14 @@
   // ---------- Permission matrix, as it applies to the signed-in user ----------
   // Mirrors team2.can_view / can_edit in the database. The database is what
   // actually protects the data; this only decides which tiles are shown.
+  // app_settings is readable by everyone signed in — never put a secret in it.
+  async function loadAppSettings() {
+    SETTINGS = {};
+    var r = await sb.from("app_settings").select("key, value");
+    if (r.error || !r.data) return;
+    r.data.forEach(function (row) { SETTINGS[row.key] = row.value; });
+  }
+
   async function loadMyAccess() {
     myAccess = {};
     if (!me || !me.role_id) return;
@@ -1055,6 +1079,184 @@
     }
 
     load();
+  }
+
+  // ---------- Settings ----------
+  // Secrets live in team2.integrations, which is admin-only for read and write.
+  // Nothing here sends anything yet: a browser cannot hold a sending credential
+  // safely, so WhatsApp/SMS/email delivery needs an edge function.
+  var INTEGRATIONS = [
+    {
+      provider: "whatsapp", icon: "users", title: "WhatsApp API",
+      note: "Meta WhatsApp Cloud API. The access token is stored admin-only.",
+      config: [
+        { k: "phone_number_id",     label: "Phone number ID" },
+        { k: "business_account_id", label: "WhatsApp business account ID" },
+        { k: "api_version",         label: "API version", ph: "v21.0" }
+      ],
+      secret: [{ k: "access_token", label: "Permanent access token" }]
+    },
+    {
+      provider: "sms", icon: "list", title: "SMS settings",
+      note: "Indian senders need a DLT-registered header and entity ID, or the operator rejects the message.",
+      config: [
+        { k: "provider_name",  label: "Provider", ph: "e.g. MSG91, TextLocal" },
+        { k: "api_url",        label: "API base URL" },
+        { k: "sender_id",      label: "Sender ID (DLT header)", ph: "6 characters" },
+        { k: "dlt_entity_id",  label: "DLT entity ID" },
+        { k: "route",          label: "Route" }
+      ],
+      secret: [{ k: "api_key", label: "API key" }]
+    },
+    {
+      provider: "email", icon: "chart", title: "Email — automatic reports",
+      note: "Used to mail the daily reports. The SMTP password is stored admin-only.",
+      config: [
+        { k: "smtp_host",  label: "SMTP host", ph: "smtp.gmail.com" },
+        { k: "smtp_port",  label: "Port", ph: "587" },
+        { k: "security",   label: "Security", options: ["STARTTLS", "SSL/TLS", "None"] },
+        { k: "username",   label: "Username" },
+        { k: "from_name",  label: "From name", ph: "Carloo Tex" },
+        { k: "from_email", label: "From address" },
+        { k: "recipients", label: "Report recipients (comma separated)", wide: true },
+        { k: "send_time",  label: "Send at", type: "time" },
+        { k: "frequency",  label: "Frequency", options: ["Daily", "Weekdays only", "Weekly (Monday)"] }
+      ],
+      secret: [{ k: "password", label: "SMTP password" }]
+    }
+  ];
+
+  function fieldHtml(p, f) {
+    var id = "set-" + p + "-" + f.k;
+    var input;
+    if (f.options) {
+      input = '<select class="txt" id="' + id + '">' +
+        f.options.map(function (o) { return '<option value="' + esc(o) + '">' + esc(o) + '</option>'; }).join("") +
+        '</select>';
+    } else {
+      input = '<input class="txt" id="' + id + '" type="' + (f.type || "text") + '"' +
+              (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') + ' autocomplete="off">';
+    }
+    return '<div class="field"' + (f.wide ? ' style="grid-column:1/-1"' : '') + '>' +
+             '<label for="' + id + '">' + esc(f.label) + '</label>' + input +
+           '</div>';
+  }
+
+  function renderSettings(host) {
+    host.innerHTML =
+      '<div class="banner">' +
+        '<b>Nothing is sent automatically yet.</b> These settings are stored, but a browser ' +
+        'cannot hold a sending credential safely — WhatsApp, SMS and email delivery each need ' +
+        'an edge function that keeps the token server-side. Tokens and passwords here are ' +
+        'readable by admins only, never by ordinary staff.' +
+      '</div>' +
+
+      // ---- Google ----
+      '<div class="panel set-card">' +
+        '<div class="card-head"><span class="ic">' + svg("globe", 18) + '</span>' +
+          '<h3>Google API</h3></div>' +
+        '<p class="sec-note">Browser key for the Unit geofence map. Enable <b>Maps JavaScript</b>, ' +
+          '<b>Geocoding</b>, <b>Places</b> and <b>Distance Matrix</b> on it. This key is visible ' +
+          'to anyone who uses the app, so it <b>must</b> be restricted by HTTP referrer to ' +
+          '<b>team2.carloo.in</b> — that restriction is what protects your billing, not secrecy.</p>' +
+        '<div class="field"><label for="set-gmaps">Google Maps browser key</label>' +
+          '<input class="txt" id="set-gmaps" type="text" placeholder="AIza…" autocomplete="off"></div>' +
+        '<div class="msg" id="set-gmaps-msg"></div>' +
+        '<div class="modal-acts"><button class="go compact" id="set-gmaps-save" type="button">Save key</button></div>' +
+      '</div>' +
+
+      INTEGRATIONS.map(function (it) {
+        return '<div class="panel set-card">' +
+          '<div class="card-head"><span class="ic">' + svg(it.icon, 18) + '</span>' +
+            '<h3>' + esc(it.title) + '</h3></div>' +
+          '<p class="sec-note">' + it.note + '</p>' +
+          '<div class="form-2">' + it.config.map(function (f) { return fieldHtml(it.provider, f); }).join("") + '</div>' +
+          it.secret.map(function (f) {
+            return '<div class="field">' +
+              '<label for="set-' + it.provider + '-' + f.k + '">' + esc(f.label) +
+                ' <span class="saved-tag" id="set-' + it.provider + '-' + f.k + '-tag"></span></label>' +
+              '<input class="txt" id="set-' + it.provider + '-' + f.k + '" type="password" ' +
+                'autocomplete="new-password" placeholder="Enter to set or replace"></div>';
+          }).join("") +
+          '<label class="chk"><input type="checkbox" id="set-' + it.provider + '-enabled"> Enabled</label>' +
+          '<div class="msg" id="set-' + it.provider + '-msg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="go compact" id="set-' + it.provider + '-save" type="button">Save</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+
+    // ---- Google key ----
+    $("set-gmaps").value = SETTINGS.google_maps_key || "";
+    if (CFG.gmapsKey) {
+      setMsg($("set-gmaps-msg"), "A key is hard-coded in index.html and overrides this box.");
+    }
+    $("set-gmaps-save").addEventListener("click", async function () {
+      var v = $("set-gmaps").value.trim();
+      $("set-gmaps-save").disabled = true;
+      setMsg($("set-gmaps-msg"), "Saving…", true);
+      var r = await sb.from("app_settings").update({ value: v, updated_by: me.id }).eq("key", "google_maps_key");
+      $("set-gmaps-save").disabled = false;
+      if (r.error) { setMsg($("set-gmaps-msg"), saveError(r.error)); return; }
+      SETTINGS.google_maps_key = v;
+      setMsg($("set-gmaps-msg"), v ? "Saved — reload the app to load the map." : "Key cleared.", true);
+    });
+
+    // ---- WhatsApp / SMS / email ----
+    (async function () {
+      var r = await sb.from("integrations").select("*");
+      if (r.error) {
+        INTEGRATIONS.forEach(function (it) { setMsg($("set-" + it.provider + "-msg"), saveError(r.error)); });
+        return;
+      }
+      var byProvider = {};
+      (r.data || []).forEach(function (x) { byProvider[x.provider] = x; });
+
+      INTEGRATIONS.forEach(function (it) {
+        var row = byProvider[it.provider] || { config: {}, secret: {}, enabled: false };
+        it.config.forEach(function (f) {
+          var el = $("set-" + it.provider + "-" + f.k);
+          if (el) el.value = row.config[f.k] == null ? "" : row.config[f.k];
+        });
+        it.secret.forEach(function (f) {
+          var tag = $("set-" + it.provider + "-" + f.k + "-tag");
+          if (tag) tag.textContent = row.secret && row.secret[f.k] ? "· saved" : "";
+        });
+        $("set-" + it.provider + "-enabled").checked = !!row.enabled;
+
+        $("set-" + it.provider + "-save").addEventListener("click", async function () {
+          var msg = $("set-" + it.provider + "-msg");
+          var config = {};
+          it.config.forEach(function (f) {
+            var el = $("set-" + it.provider + "-" + f.k);
+            if (el && el.value.trim()) config[f.k] = el.value.trim();
+          });
+          // Keep any secret that was not retyped; blanks never wipe a stored value.
+          var secret = Object.assign({}, row.secret || {});
+          it.secret.forEach(function (f) {
+            var el = $("set-" + it.provider + "-" + f.k);
+            if (el && el.value) secret[f.k] = el.value;
+          });
+
+          $("set-" + it.provider + "-save").disabled = true;
+          setMsg(msg, "Saving…", true);
+          var up = await sb.from("integrations")
+            .update({ config: config, secret: secret,
+                      enabled: $("set-" + it.provider + "-enabled").checked, updated_by: me.id })
+            .eq("provider", it.provider);
+          $("set-" + it.provider + "-save").disabled = false;
+          if (up.error) { setMsg(msg, saveError(up.error)); return; }
+          row.config = config; row.secret = secret;
+          it.secret.forEach(function (f) {
+            var el = $("set-" + it.provider + "-" + f.k);
+            if (el) el.value = "";
+            var tag = $("set-" + it.provider + "-" + f.k + "-tag");
+            if (tag) tag.textContent = secret[f.k] ? "· saved" : "";
+          });
+          setMsg(msg, "Saved", true);
+        });
+      });
+    })();
   }
 
   // ---------- Schedule master ----------
@@ -1731,13 +1933,19 @@
   var GMaps = (function () {
     var loading = null;
 
+    // The key comes from Settings (app_settings.google_maps_key) so it never has to
+    // live in this file or in the repo. APP_CFG.gmapsKey still wins if it is set.
+    function key() {
+      return String(CFG.gmapsKey || SETTINGS.google_maps_key || "").trim();
+    }
+
     function load() {
-      if (!CFG.gmapsKey) return Promise.resolve(null);
+      if (!key()) return Promise.resolve(null);
       if (loading) return loading;
       loading = new Promise(function (resolve, reject) {
         var s = document.createElement("script");
         s.src = "https://maps.googleapis.com/maps/api/js?key=" +
-                encodeURIComponent(CFG.gmapsKey) + "&libraries=places&loading=async";
+                encodeURIComponent(key()) + "&libraries=places&loading=async";
         s.async = true;
         s.onload = function () { resolve(window.google && window.google.maps ? window.google.maps : null); };
         s.onerror = function () { reject(new Error("Google Maps failed to load")); };
@@ -1814,7 +2022,7 @@
     }
 
     return { load: load, here: here, address: address, autocomplete: autocomplete, roadKm: roadKm,
-             enabled: function () { return !!CFG.gmapsKey; } };
+             key: key, enabled: function () { return !!key(); } };
   })();
 
   window.Team2 = { sb: sb, GMaps: GMaps, me: function () { return me; } };
@@ -1844,6 +2052,7 @@
 
     me = r.data;
     await loadMyAccess();
+    await loadAppSettings();
     setMsg($("loginMsg"), "");
     $("whoName").textContent = me.name || me.username;
     $("whoRole").textContent = me.role;
