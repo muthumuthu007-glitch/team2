@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.9.5 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.9.6 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -125,6 +125,21 @@ unencrypted between our server and SMV — worth asking them for https.
 
 Settings saves now **merge** into the stored config, so fields the form does not show
 (the templates) are never wiped by a Save.
+
+### Email (v0.9.6)
+
+`mms@carloo.in`, hosted on **Netcore** (MX `cluster*.netcore.co.in`). Verified by
+connecting, not guessed:
+
+| | Host | Port | Evidence |
+|---|---|---|---|
+| Outgoing (SMTP) | `smtp3.netcore.co.in` | 465, SSL/TLS | valid cert, greets as `ncismumsmtp1` |
+| Incoming (POP3) | `pop3.netcore.co.in` | 995, SSL/TLS | valid cert, greets as `ncismumpop3` |
+
+Both carry the same `ncismum` platform prefix. **Not** `mail.carloo.in` — it resolves but
+answers on no port at all. **Not** `smtps.netcore.co.in` — that is Netcore Cloud's separate
+bulk-mail product. The password is entered by the user in Settings; email stays switched
+off until they tick Enabled. No email sender is built yet.
 
 **Nothing sends yet.** A browser cannot hold a sending credential safely, so WhatsApp,
 SMS and email delivery each need an edge function. The screen says so.

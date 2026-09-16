@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.5",
+    version: "0.9.6",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -1877,9 +1877,11 @@
       provider: "email", icon: "chart", title: "Email — automatic reports",
       note: "Used to mail the daily reports. The SMTP password is stored admin-only.",
       config: [
-        { k: "smtp_host",  label: "SMTP host", ph: "smtp.gmail.com" },
-        { k: "smtp_port",  label: "Port", ph: "587" },
-        { k: "security",   label: "Security", options: ["STARTTLS", "SSL/TLS", "None"] },
+        { k: "smtp_host",  label: "Outgoing server (SMTP)", ph: "smtp3.netcore.co.in" },
+        { k: "smtp_port",  label: "SMTP port", ph: "465" },
+        { k: "security",   label: "Security", options: ["SSL/TLS", "STARTTLS", "None"] },
+        { k: "pop_host",   label: "Incoming server (POP3)", ph: "pop3.netcore.co.in" },
+        { k: "pop_port",   label: "POP3 port", ph: "995" },
         { k: "username",   label: "Username" },
         { k: "from_name",  label: "From name", ph: "Carloo Tex" },
         { k: "from_email", label: "From address" },
