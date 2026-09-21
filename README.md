@@ -8,7 +8,7 @@ Mobile-first app for **attendance, leave, permission and field visits**.
 - Production host: **team2.carloo.in** — attached to the project, *waiting on one DNS record*
 - Backend: existing Supabase project `carloo-order-management`
   (`thmszlxepqkrcqavlilq`), own **`team2` schema**
-- Version: 0.9.9 (set in `window.APP_CFG` at the top of `index.html`)
+- Version: 0.10.0 (set in `window.APP_CFG` at the top of `index.html`)
 
 Same house pattern as Mono / Muthu's / Asset: one plain `index.html`, no build
 step, Supabase JS from the CDN, `db/*.sql` as the SQL source of truth.
@@ -61,6 +61,7 @@ set in type (Calibri) — swap in the real logo file when there is one.
 | **Unit** | Name, address (Google Places search), city, pincode, active. Geofence is a **circle** (drag it, or set a radius) or a **polygon** you draw by clicking corners on the map, plus a **buffer** in metres. Stored in `team2.locations`. |
 | **Department** | Name + active, with **Export**, **Import** and a downloadable import template. |
 | **Designation** | Same screen as Department, different table. |
+| **Company** | Superadmin only (v0.10.0). Name, address, GST number, email, phone, plus the company's **first admin login** created in the same step. Validates GSTIN (15-char format), email and duplicate names in the app **and** in the database. Companies are deactivated, never deleted. |
 | **Supplier** | Was "Customer / Site" (v0.9.9), `team2.parties` with `party_type = 'supplier'`. Code, name, address, phone, status; **Upload list** reads the company supplier sheet (.xlsx/.xls/.csv — columns *Supplier Name, Address, Phone No*), skips names already present, and imports in batches of 500. Export and Template write the same layout. Shows the first 300 matches; search narrows it. |
 | **Visit Purpose** | Same screen again (v0.9.8), `team2.visit_purposes` — six starter purposes were seeded. |
 | **Role** | Name, description, **Full access** (bypasses the matrix) and active, with Export / Import / template. Stored in `team2.roles`. |
@@ -89,6 +90,19 @@ The Maps key is entered there, not in this file, so it never reaches the repo.
 
 Never move a token into `app_settings` — ordinary staff can read that table through
 the API. Secret boxes show "· saved" and stay blank; typing replaces, blank keeps.
+
+### Multi-company: what exists and what does NOT
+
+`team2.companies` + `profiles.company_id` exist, and Admin › Company creates a company
+with its admin login (through `team2-admin`, action `create_company`, superadmin only —
+it deletes the company again if the login cannot be created, so a company is never left
+without a way in).
+
+**Data is NOT separated by company yet.** No other table carries `company_id`, and no RLS
+policy filters on it, so every admin still sees every company's records. Before a real
+customer is signed up, each data table needs a `company_id` column, a default from the
+signed-in user's company, and its policy extended with "same company as me". The Company
+screen says this in a banner.
 
 ### WhatsApp (v0.9.3)
 

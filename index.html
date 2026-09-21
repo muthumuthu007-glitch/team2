@@ -15,7 +15,7 @@
   // Production host: https://team2.carloo.in (not attached yet).
   // Data lives in the `team2` schema of the carloo-order-management project.
   window.APP_CFG = {
-    version: "0.9.9",
+    version: "0.10.0",
     url: "https://thmszlxepqkrcqavlilq.supabase.co",
     key: "sb_publishable_JUznnQZytWQo_l-EC9N3Sw_uCfArTet",
 
@@ -644,6 +644,9 @@
     { group: "Reports", id: "reports", label: "Reports",           desc: "Attendance, leave, visits", icon: "chart" },
     { group: "Reports", id: "trips",   label: "Travel / Distance", desc: "Km travelled &amp; claims",     icon: "car" },
 
+    { group: "Admin", id: "companies",   label: "Company",     desc: "Subscribing companies",   icon: "building",
+      roles: ["superadmin"],
+      render: function (h) { renderCompanies(h); } },
     { group: "Admin", id: "users",       label: "User Master", desc: "Staff, logins &amp; reporting line", icon: "users",
       roles: ["superadmin", "admin"],
       render: function (h) { renderUsers(h); } },
@@ -1519,6 +1522,224 @@
         var r = await sb.from(cfg.table).insert(pending);
         if (r.error) { $("sm-igo").disabled = false; setMsg($("sm-imsg"), saveError(r.error)); return; }
         closeModal();
+        load();
+      });
+    }
+
+    load();
+  }
+
+  // ---------- Company master ----------
+  // Creating a company also creates its first admin login, so both go through the
+  // team2-admin edge function (a login needs the service-role key).
+  //
+  // ⚠ Companies do NOT separate data yet. Until every table carries company_id and
+  // its RLS policy filters on it, every admin still sees all data.
+  var GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+  function renderCompanies(host) {
+    var rows = [], byId = {}, counts = {};
+
+    host.innerHTML =
+      '<div class="banner">' +
+        '<b>Data is not separated by company yet.</b> A company created here gets its own ' +
+        'admin login, but that admin can still see every company\u2019s records. Before signing up ' +
+        'a real customer, each table needs a company column and a matching access rule.' +
+      '</div>' +
+      '<div class="panel toolbar">' +
+        '<input class="txt search" id="co-search" type="search" placeholder="Search company, GST number or phone…">' +
+        '<label class="chk"><input type="checkbox" id="co-inactive"> Show inactive</label>' +
+        '<button class="mini" id="co-export" type="button">Export</button>' +
+        '<button class="go compact" id="co-add" type="button">Add company</button>' +
+        '<span class="result-count" id="co-count"></span>' +
+      '</div>' +
+      '<div class="msg" id="co-msg" style="margin:10px 0"></div>' +
+      '<div id="co-host"><div class="panel state">Loading…</div></div>';
+
+    $("co-search").addEventListener("input", paint);
+    $("co-inactive").addEventListener("change", paint);
+    $("co-add").addEventListener("click", function () { form(null); });
+    $("co-export").addEventListener("click", function () {
+      download("companies-" + today() + ".csv", toCsv(
+        [["code", "name", "gstin", "email", "phone", "address", "staff", "active"]].concat(
+          visible().map(function (c) {
+            return [c.company_code, c.name, c.gstin || "", c.email || "", c.phone || "",
+                    c.address || "", counts[c.id] || 0, c.active ? "yes" : "no"];
+          }))));
+    });
+
+    function visible() {
+      var q = $("co-search").value.trim().toLowerCase();
+      var showOff = $("co-inactive").checked;
+      return rows.filter(function (c) {
+        if (!c.active && !showOff) return false;
+        if (!q) return true;
+        return [c.name, c.company_code, c.gstin, c.phone, c.email].join(" ").toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
+    function paint() {
+      var list = visible();
+      $("co-count").textContent = list.length + " of " + rows.length + " companies";
+      var host2 = $("co-host");
+      if (!list.length) {
+        host2.innerHTML = '<div class="panel state">' +
+          (rows.length ? "No company matches that search." : "No companies yet — use <b>Add company</b>.") + '</div>';
+        return;
+      }
+      host2.innerHTML = '<div class="matrix-wrap"><table class="matrix"><thead><tr>' +
+        '<th>Code</th><th class="page-col">Company</th><th>GST number</th><th>Email</th><th>Phone</th>' +
+        '<th>Address</th><th>Staff</th><th>Status</th><th>Actions</th></tr></thead><tbody>' +
+        list.map(function (c) {
+          return '<tr><td>' + esc(c.company_code) + '</td>' +
+            '<td class="page-col nm">' + esc(c.name) + '</td>' +
+            '<td>' + esc(c.gstin || "–") + '</td>' +
+            '<td>' + esc(c.email || "–") + '</td>' +
+            '<td>' + esc(c.phone || "–") + '</td>' +
+            '<td style="white-space:normal;min-width:220px">' + esc(c.address || "–") + '</td>' +
+            '<td>' + (counts[c.id] || 0) + '</td>' +
+            '<td><span class="pill ' + (c.active ? "on" : "off") + '">' + (c.active ? "Active" : "Inactive") + '</span></td>' +
+            '<td style="white-space:nowrap">' +
+              '<button class="act-btn" data-edit="' + c.id + '" title="Edit" type="button">' + svg("edit", 14) + '</button>' +
+              '<button class="act-btn" data-toggle="' + c.id + '" title="' +
+                (c.active ? "Deactivate" : "Activate") + '" type="button">' + svg("check", 14) + '</button>' +
+            '</td></tr>';
+        }).join("") + '</tbody></table></div>' +
+        '<div class="legend">A company is never deleted — switch it to <b>Inactive</b>, so its ' +
+        'records and staff history stay intact.</div>';
+
+      host2.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.addEventListener("click", function () { form(byId[b.dataset.edit]); });
+      });
+      host2.querySelectorAll("[data-toggle]").forEach(function (b) {
+        b.addEventListener("click", function () { toggleActive(byId[b.dataset.toggle]); });
+      });
+    }
+
+    async function load() {
+      var r = await sb.from("companies").select("*").order("company_code");
+      if (r.error) {
+        $("co-host").innerHTML = '<div class="panel state">Could not load companies — ' + esc(r.error.message) + '</div>';
+        return;
+      }
+      rows = r.data || [];
+      byId = {};
+      rows.forEach(function (c) { byId[c.id] = c; });
+      counts = {};
+      var pr = await sb.from("profiles").select("company_id");
+      if (!pr.error && pr.data) {
+        pr.data.forEach(function (x) { if (x.company_id) counts[x.company_id] = (counts[x.company_id] || 0) + 1; });
+      }
+      paint();
+    }
+
+    async function toggleActive(c) {
+      if (!c) return;
+      var to = !c.active;
+      if (!window.confirm((to ? "Activate " : "Deactivate ") + c.name + "?")) return;
+      var r = await sb.from("companies").update({ active: to }).eq("id", c.id);
+      if (r.error) { setMsg($("co-msg"), saveError(r.error)); return; }
+      setMsg($("co-msg"), c.name + (to ? " activated" : " deactivated"), true);
+      load();
+    }
+
+    function form(c) {
+      openModal(c ? "Edit company — " + c.name : "Add company",
+        '<div class="form-grid">' +
+          '<div class="field"><label for="co-name">Company name *</label>' +
+            '<input class="txt" id="co-name" type="text" autocomplete="off"></div>' +
+          '<div class="field"><label for="co-addr">Address</label>' +
+            '<textarea class="txt" id="co-addr" rows="3"></textarea></div>' +
+          '<div class="form-2">' +
+            '<div class="field"><label for="co-gst">GST number</label>' +
+              '<input class="txt" id="co-gst" type="text" autocomplete="off" maxlength="15" ' +
+                'placeholder="33ABCDE1234F1Z5" style="text-transform:uppercase"></div>' +
+            '<div class="field"><label for="co-phone">Phone number</label>' +
+              '<input class="txt" id="co-phone" type="tel" autocomplete="off"></div>' +
+          '</div>' +
+          '<div class="field"><label for="co-email">Email ID</label>' +
+            '<input class="txt" id="co-email" type="email" autocomplete="off"></div>' +
+          '<label class="chk"><input type="checkbox" id="co-active" checked> Active</label>' +
+
+          (c ? '' :
+            '<div class="sec"><span class="sec-title">Company admin login</span>' +
+              '<div class="form-2">' +
+                '<div class="field"><label for="co-user">Admin username (mobile) *</label>' +
+                  '<input class="txt" id="co-user" type="tel" inputmode="numeric" maxlength="10" autocomplete="off"></div>' +
+                '<div class="field"><label for="co-pass">Password *</label>' +
+                  '<input class="txt" id="co-pass" type="password" autocomplete="new-password" ' +
+                    'placeholder="At least 6 characters"></div>' +
+              '</div>' +
+              '<div class="field"><label for="co-aname">Admin name</label>' +
+                '<input class="txt" id="co-aname" type="text" autocomplete="off" placeholder="Defaults to the company name"></div>' +
+              '<span class="sec-note">They sign in on the <b>Admin</b> tab with this mobile number. ' +
+                'Tell them the password yourself — it cannot be read back here.</span>' +
+            '</div>') +
+
+          '<div class="msg" id="co-fmsg"></div>' +
+          '<div class="modal-acts">' +
+            '<button class="mini" id="co-cancel" type="button">Cancel</button>' +
+            '<button class="go compact" id="co-save" type="button">' +
+              (c ? "Save changes" : "Create company &amp; admin") + '</button>' +
+          '</div>' +
+        '</div>');
+
+      $("co-name").value = c ? c.name : "";
+      $("co-addr").value = c && c.address ? c.address : "";
+      $("co-gst").value = c && c.gstin ? c.gstin : "";
+      $("co-phone").value = c && c.phone ? c.phone : "";
+      $("co-email").value = c && c.email ? c.email : "";
+      $("co-active").checked = c ? !!c.active : true;
+      if (!c) {
+        $("co-user").addEventListener("input", function () {
+          this.value = this.value.replace(/\D/g, "").slice(0, 10);
+        });
+      }
+      $("co-cancel").addEventListener("click", closeModal);
+      $("co-name").focus();
+
+      $("co-save").addEventListener("click", async function () {
+        var msg = $("co-fmsg");
+        var name = $("co-name").value.trim();
+        var gst = $("co-gst").value.trim().toUpperCase();
+        var email = $("co-email").value.trim();
+        if (!name) { setMsg(msg, "Enter the company name"); return; }
+        if (gst && !GSTIN_RE.test(gst)) { setMsg(msg, "That GST number is not in the 15-character format"); return; }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(msg, "That email is not valid"); return; }
+        var clash = rows.some(function (x) {
+          return x.name.trim().toLowerCase() === name.toLowerCase() && (!c || x.id !== c.id);
+        });
+        if (clash) { setMsg(msg, "A company with that name already exists"); return; }
+
+        var fields = {
+          name: name,
+          address: $("co-addr").value.trim() || null,
+          gstin: gst || null,
+          email: email || null,
+          phone: $("co-phone").value.trim() || null,
+          active: $("co-active").checked
+        };
+
+        $("co-save").disabled = true;
+        setMsg(msg, "Saving…", true);
+        var r;
+        if (c) {
+          r = await sb.from("companies").update(fields).eq("id", c.id);
+          if (r.error) { $("co-save").disabled = false; setMsg(msg, saveError(r.error)); return; }
+        } else {
+          var user = $("co-user").value.replace(/\D/g, "");
+          if (user.length !== 10) { $("co-save").disabled = false; setMsg(msg, "Admin username must be a 10-digit mobile number"); return; }
+          if ($("co-pass").value.length < 6) { $("co-save").disabled = false; setMsg(msg, "Password must be at least 6 characters"); return; }
+          r = await adminCall({
+            action: "create_company",
+            company: fields,
+            admin: { username: user, password: $("co-pass").value, name: $("co-aname").value.trim() }
+          });
+          if (r.error) { $("co-save").disabled = false; setMsg(msg, r.error); return; }
+        }
+        $("co-save").disabled = false;
+        closeModal();
+        setMsg($("co-msg"), c ? "Saved" : "Created " + name + " — its admin signs in with " + r.admin_username, true);
         load();
       });
     }
