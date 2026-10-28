@@ -340,53 +340,90 @@ history with it.
 
 ## Deploying
 
-**Deployed 2026-09-06.** Vercel project `team2`
-(`prj_xjBr2oWnwUg2UdWocaQNbGcpzu5i`) under `muthumuthu007-9344s-projects`,
-production deployment live at:
+**Everything runs on our own server.** Vercel, Cloudflare and Supabase Cloud are
+out of the picture as of 2026-10-28.
 
-- <https://team2-ruddy.vercel.app>
-- <https://team2-muthumuthu007-9344s-projects.vercel.app>
+    laptop  D:\Team2
+      |  git push
+      v
+    GitHub  muthumuthu007-glitch/team2
+      |  systemd timer checks every 2 minutes
+      v
+    Webtel server  160.187.251.205
+      Caddy  ->  /var/www/team2            (the app)
+             ->  127.0.0.1:8000            (Supabase: rest, auth, storage,
+                                            functions, realtime)
 
-Those `*.vercel.app` URLs are behind Vercel Authentication
-(`ssoProtection: all_except_custom_domains`), so only someone signed in to the
-Vercel account sees them. That is the default and it is the right setting —
-**custom domains are exempt**, so `team2.carloo.in` will be public once DNS
-points at Vercel. Do not disable it to "make the site work".
+So **you deploy by pushing to GitHub**. Within two minutes the live site has it.
+Nothing else to run.
 
-### team2.carloo.in — waiting on one DNS record
+### One hostname does both
 
-The domain is already attached to the project. The only thing left:
+`team2.carloo.in` serves the app *and* the API. Caddy
+(`/etc/caddy/Caddyfile`) sends `/rest/*`, `/auth/*`, `/storage/*`,
+`/functions/*` and `/realtime/*` to the local Supabase stack and serves
+everything else from disk. The certificate is Let's Encrypt, renewed
+automatically. There is no separate database hostname — `db.team2.carloo.in` was
+abandoned.
 
-    A    team2.carloo.in    76.76.21.21
+### What deploy.sh rewrites
 
-It currently resolves to **172.66.2.113 / 162.159.142.117 (Cloudflare)**, which
-is why HTTPS fails the TLS handshake — nothing holds a certificate for it.
-Change that record at **BigRock** (`carloo.in` still uses dns1-4.bigrock.in) to
-the `A` record above, the same one `asset.carloo.in` uses. Vercel issues the
-certificate automatically once it sees it, usually within minutes.
+`index.html` in this repo keeps the **Supabase Cloud** url and key on purpose, so
+the file stays deployable anywhere. `~/team2-src/deploy.sh` rewrites three things
+in the copy it puts in `/var/www/team2`:
 
-Check progress with:
+| in the repo | on the server |
+|---|---|
+| `url: "https://thmszlxepqkrcqavlilq.supabase.co"` | `url: "https://team2.carloo.in"` |
+| `key: "sb_publishable_…"` | the server's own `ANON_KEY`, read from `/opt/supabase/.env` |
+| `version: "2.0.1"` | `version: "2.0.1+<git short sha>"` |
 
-    npx vercel@latest domains inspect team2.carloo.in
+**Do not "fix" the repo copy to point at the server.** The rewrite is the point,
+and the stamped version is how you tell which commit is live — it shows on the
+login page and in the sidebar footer.
 
-### Pushing updates
+### Server programs (edge functions)
 
-From `D:\Team2`:
+Four of them, in `supabase/functions/`:
 
-    npx vercel@latest --prod
+| name | what it does |
+|---|---|
+| `team2-admin` | creates logins, sets passwords, bulk import, creates a company |
+| `team2-sms` | SMV gateway, DLT templates |
+| `team2-whatsapp` | whatapi.in, Team2's own account |
+| `team2-email` | SMTP test send |
 
-The folder is linked (`.vercel/project.json`), so it goes straight to the `team2`
-project — no prompts, and no risk of the old trap where "Search all projects"
-silently linked a folder to `carloo-order-management`.
+They need the service-role key, which must never reach a browser, so they run
+server-side and re-check the caller's token themselves. The browser calls them at
+`CFG.url + "/functions/v1/<name>"`.
 
-**Correction to earlier notes:** project *creation* and *domain attachment* both
-worked here via the Vercel CLI, which is logged in as `muthumuthu007-9344`.
-The 403 recorded against Muthu's and Asset was the **MCP integration token**, not
-the CLI. `vercel project add <name>` and `vercel domains add <domain> <project>`
-both succeed. Note `vercel --prod --yes` alone fails in this folder — it derives
-the project name from the directory `Team2`, and Vercel requires lowercase.
+Install them **once** with `./functions-install.sh` on the server; after that
+`deploy.sh` copies them into `/opt/supabase/volumes/functions/` on every push.
 
----
+A working function answers **401 "Not signed in"** when called with no token —
+that is the health check. `404 NOT_FOUND` means it was never copied in.
+
+Known rough edge: the functions download their libraries from esm.sh and
+deno.land the first time each one runs. That cache lives inside the container, so
+it survives a restart but is lost on `recreate` or an image update — the first
+call after that is slow, and fails outright if the server has no internet at that
+moment. Worth vendoring the libraries before this carries real traffic.
+
+### Doing it by hand
+
+On the server, if you do not want to wait for the timer:
+
+    cd ~/team2-src && ./deploy.sh
+
+Useful checks:
+
+    systemctl list-timers team2-deploy.timer     # is auto-deploy on
+    journalctl -u team2-deploy -n 30             # what the last run did
+    cd /opt/supabase && ./run.sh status          # are the containers healthy
+
+From anywhere, to see which commit is live:
+
+    curl -s https://team2.carloo.in/ | grep -o 'version: "[^"]*"'
 
 ## Known gaps
 

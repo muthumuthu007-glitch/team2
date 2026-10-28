@@ -31,5 +31,18 @@ sudo chown -R caddy:caddy "$WEB"
 grep -q 'url: "https://team2.carloo.in"' "$WEB/index.html" \
   || { echo "ERROR: url not rewritten"; exit 1; }
 
+# Server programs. The browser calls these at /functions/v1/<name>, which Caddy
+# hands to the Supabase edge runtime. Run functions-install.sh once before this
+# works; after that every push keeps them current.
+FNDIR=/opt/supabase/volumes/functions
+if [ -d "$FNDIR" ]; then
+  for d in supabase/functions/*/; do
+    f=$(basename "$d")
+    [ -f "$d/index.ts" ] || continue
+    sudo mkdir -p "$FNDIR/$f"
+    sudo cp "$d/index.ts" "$FNDIR/$f/index.ts"
+  done
+fi
+
 sudo systemctl reload caddy
 echo "deployed $VER+$BUILD"
