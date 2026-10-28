@@ -538,3 +538,5 @@ The full wordmark appears on the splash screen.
   approving a leave request does not yet deduct from it.
 - **Geofencing is advisory.** The app decides `within_geofence` and the database
   believes it. A phone can lie about its location; treat it as a deterrent, not proof.
+
+<!-- deploy check: 2026-10-28, after the execute-bit and false-success fixes -->
