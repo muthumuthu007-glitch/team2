@@ -16,6 +16,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
@@ -28,6 +29,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -139,9 +141,10 @@ public class MainActivity extends Activity {
             @Override
             public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb,
                                              FileChooserParams params) {
+                if (filePicker != null) filePicker.onReceiveValue(null);
                 filePicker = cb;
                 try {
-                    startActivityForResult(params.createIntent(), REQ_FILE);
+                    startActivityForResult(widen(params.createIntent()), REQ_FILE);
                 } catch (Exception e) {
                     filePicker = null;
                     return false;
@@ -167,7 +170,46 @@ public class MainActivity extends Activity {
                 cb.invoke(origin, granted, false);
             }
         });
+
+        // A link to a document would otherwise do nothing in a WebView. Hand it
+        // to whatever app on the phone can open that kind of file.
+        w.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String ua, String disposition,
+                                        String mime, long size) {
+                try {
+                    Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(open);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this,
+                            "No app on this phone can open that file.",
+                            Toast.LENGTH_LONG).show();
+                }
+            }
+        });
         return w;
+    }
+
+    /**
+     * Staff attach whatever the job produced - a gallery photo, a scanned PDF, a
+     * spreadsheet - so the picker is opened on every file type, even when the
+     * page asked only for images. The camera option the page requested is left
+     * alone, so taking a selfie still works.
+     */
+    private Intent widen(Intent intent) {
+        if (intent == null) return null;
+        Intent content = intent;
+        if (Intent.ACTION_CHOOSER.equals(intent.getAction())) {
+            // createIntent() wraps camera and file-picking in a chooser.
+            // Widen the file-picking half and leave the camera half untouched.
+            Object inner = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            if (inner instanceof Intent) content = (Intent) inner;
+        }
+        content.setType("*/*");
+        content.removeExtra(Intent.EXTRA_MIME_TYPES);
+        content.addCategory(Intent.CATEGORY_OPENABLE);
+        return intent;
     }
 
     // ------------------------------------------------------------ splash panel
@@ -249,7 +291,8 @@ public class MainActivity extends Activity {
         offer("Team2 needs a few things on this phone:\n\n"
                 + "Camera — your punch-in selfie and visit photos\n"
                 + "Location — where you punched in and which places you visited\n"
-                + "Photos — to attach a picture from your gallery\n\n"
+                + "Photos and videos — to attach from your gallery\n\n"
+                + "Documents are picked one at a time and need no permission.\n"
                 + "You can change these later in Settings.",
               "Continue", new View.OnClickListener() {
                   @Override public void onClick(View v) { requestThem(); }
@@ -265,9 +308,18 @@ public class MainActivity extends Activity {
         want.add(Manifest.permission.CAMERA);
         want.add(Manifest.permission.ACCESS_FINE_LOCATION);
         want.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        want.add(Build.VERSION.SDK_INT >= 33
-                ? Manifest.permission.READ_MEDIA_IMAGES
-                : Manifest.permission.READ_EXTERNAL_STORAGE);
+        if (Build.VERSION.SDK_INT >= 33) {
+            want.add(Manifest.permission.READ_MEDIA_IMAGES);
+            want.add(Manifest.permission.READ_MEDIA_VIDEO);
+            // Android 14 lets someone grant only the items they pick. Asking for
+            // it alongside the two above is what puts "Select photos" on the
+            // prompt; without it they only get all-or-nothing.
+            if (Build.VERSION.SDK_INT >= 34) {
+                want.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED);
+            }
+        } else {
+            want.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
 
         List<String> missing = new ArrayList<String>();
         for (String p : want) {

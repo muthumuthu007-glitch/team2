@@ -458,15 +458,34 @@ The shell appends `Team2App/<version>` to the user agent. `index.html` reads
 that and **removes the Admin tab** from the login page, so the phone app signs
 in as Team or Visitor only. Administration stays on a desktop browser.
 
+### Attachments - no file-type limit
+
+Staff attach whatever the job produced: a gallery photo, a scanned PDF, a
+spreadsheet. The page's own `accept="image/*"` would normally restrict the
+picker to images, so the shell **widens it to every file type** before opening
+it (`widen()` in MainActivity). When the page asked for the camera, that half of
+the chooser is left alone, so taking a selfie still works.
+
+A link to a document is handed to whatever app on the phone can open it, via a
+`DownloadListener` - a WebView ignores such links otherwise.
+
 ### Permissions, and one that does not exist
 
 | asked for | why |
 |---|---|
 | Camera | punch-in selfie, visit photos |
 | Location (fine + coarse) | where a punch or visit happened |
-| Photos / media | attaching a picture from the gallery |
+| Photos and videos | attaching from the gallery |
 
-**There is no "save to phone" permission to ask for.** Android has not worked
+On Android 14 and up `READ_MEDIA_VISUAL_USER_SELECTED` is requested alongside
+the two media permissions. That is what puts **"Select photos"** on the prompt;
+without it the choice is all-or-nothing.
+
+**Documents need no permission at all.** PDFs, Excel, Word and the rest come
+through the system document picker, which grants access to the one file that was
+chosen. That is why there is no storage permission here beyond Android 12.
+
+**And there is no "save to phone" permission to ask for.** Android has not worked
 that way since version 10 - an app can always write its own private storage, and
 that is where the WebView keeps GPS readings until they can be sent. Asking for
 `WRITE_EXTERNAL_STORAGE` would be ignored on every modern phone, so it is not in
