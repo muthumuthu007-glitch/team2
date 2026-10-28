@@ -11,7 +11,17 @@ WEB=/var/www/team2
 ENV=/opt/supabase/.env
 
 cd "$SRC"
+
+# bash reads a script lazily, by byte offset. git pull can rewrite THIS file
+# mid-run, after which bash carries on reading the new file from the old
+# offset - skipping lines or running fragments. Re-exec if it changed.
+BEFORE=$(md5sum "$0" | cut -d" " -f1)
 git pull --ff-only --quiet
+AFTER=$(md5sum "$0" | cut -d" " -f1)
+if [ "$BEFORE" != "$AFTER" ] && [ -z "${TEAM2_REEXEC:-}" ]; then
+  export TEAM2_REEXEC=1
+  exec /bin/bash "$0" "$@"
+fi
 
 ANON=$(grep '^ANON_KEY=' "$ENV" | cut -d= -f2)
 [ -n "$ANON" ] || { echo "ERROR: ANON_KEY not found in $ENV"; exit 1; }
@@ -27,6 +37,12 @@ sudo sed -i \
   -e "s|version: \"$VER\"|version: \"$VER+$BUILD\"|" \
   "$WEB/index.html"
 sudo chown -R caddy:caddy "$WEB"
+
+# Check for the stamp of THIS build. The url alone proves nothing: the previous
+# deploy already wrote it, so a stale file passed that test and the script
+# reported success having copied nothing.
+grep -q "version: \"$VER+$BUILD\"" "$WEB/index.html" \
+  || { echo "ERROR: $WEB/index.html is not the build we just made"; exit 1; }
 
 grep -q 'url: "https://team2.carloo.in"' "$WEB/index.html" \
   || { echo "ERROR: url not rewritten"; exit 1; }
