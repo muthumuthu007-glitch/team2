@@ -96,7 +96,7 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         if (hasAll()) checkThenLoad();
-        else askForPermissions();
+        else requestThem();   // straight to Android's own prompts
     }
 
     // ---------------------------------------------------------------- web view
@@ -310,21 +310,16 @@ public class MainActivity extends Activity {
         return true;
     }
 
-    /** Say what is needed and why, then ask Android for it. */
-    private void askForPermissions() {
-        gated = true;
-        offer("Team2 needs two things on this phone:\n\n"
-                + "Camera — your punch-in selfie and visit photos\n"
-                + "Location — where you punched in and which places you visited\n\n"
-                + "Both are required. Please choose Allow, and Precise for "
-                + "location.\n\nAttaching photos or documents needs no permission.",
-              "Continue", new View.OnClickListener() {
-                  @Override public void onClick(View v) { requestThem(); }
-              });
-    }
-
+    /**
+     * Asks Android straight away. There is no screen of our own in front of it:
+     * the system prompt already names the permission and the app, and a page
+     * explaining it first only put a Continue button between the person and the
+     * thing they have to answer anyway. Explaining happens when it matters -
+     * after a refusal, below.
+     */
     private void requestThem() {
         if (hasAll()) { gated = false; checkThenLoad(); return; }
+        gated = true;
 
         List<String> missing = new ArrayList<String>();
         for (String p : REQUIRED) {

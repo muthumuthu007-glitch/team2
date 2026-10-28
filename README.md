@@ -440,8 +440,11 @@ We own team2.carloo.in, so the shell just loads it.
 
 ### What happens on launch
 
-1. **First run only** — a screen explaining what the app needs and why, then
-   Android's own permission prompts: camera, location, photos.
+1. **First run only** — Android's own permission prompts, camera then location,
+   with no screen of ours in front of them. The system prompt already names the
+   permission and the app; a page explaining it first only put a Continue button
+   between the person and the question they have to answer anyway. Explaining
+   happens where it earns its place: after a refusal.
 2. **Every run** — "Checking for updates...", which reads the top of the page
    from the server and shows the build it is about to open
    (`Loading Team2 2.1.0+abc1234...`). The update is therefore finished *before*
