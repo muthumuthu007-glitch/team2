@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -61,8 +62,6 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity {
 
     private static final String APP_URL = "https://team2.carloo.in/";
-    private static final String PREFS = "team2";
-    private static final String KEY_ASKED = "asked_permissions";
     private static final int REQ_FILE = 1001;
     private static final int REQ_PERMS = 1002;
 
@@ -77,6 +76,7 @@ public class MainActivity extends Activity {
     private Button splashButton;
     private ValueCallback<Uri[]> filePicker;
     private boolean pageShown = false;
+    private boolean gated = false;   // held at the permission screen
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -95,11 +95,8 @@ public class MainActivity extends Activity {
         root.addView(splash);
         setContentView(root);
 
-        if (getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_ASKED, false)) {
-            checkThenLoad();
-        } else {
-            askForPermissions();
-        }
+        if (hasAll()) checkThenLoad();
+        else askForPermissions();
     }
 
     // ---------------------------------------------------------------- web view
@@ -286,60 +283,115 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------- permissions
 
-    /** First launch only: say what is needed and why, then ask Android for it. */
+    /**
+     * Camera and precise location are required, not optional: an attendance app
+     * whose punches carry no selfie and no coordinates records nothing anyone
+     * can rely on. The app will not open until both are granted.
+     *
+     * Android has no way to demand permissions at install time - every runtime
+     * permission can be refused - so refusing to run is the strongest the
+     * platform allows.
+     *
+     * There is no gallery permission here. Attachments come through Android's
+     * own picker, which hands over the one chosen file; asking for READ_MEDIA_*
+     * would only add the "Allow limited access" prompt and buy nothing.
+     */
+    private static final String[] REQUIRED = {
+        Manifest.permission.CAMERA,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+    };
+
+    private boolean hasAll() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
+        for (String p : REQUIRED) {
+            if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) return false;
+        }
+        return true;
+    }
+
+    /** Say what is needed and why, then ask Android for it. */
     private void askForPermissions() {
-        offer("Team2 needs a few things on this phone:\n\n"
+        gated = true;
+        offer("Team2 needs two things on this phone:\n\n"
                 + "Camera — your punch-in selfie and visit photos\n"
-                + "Location — where you punched in and which places you visited\n"
-                + "Photos and videos — to attach from your gallery\n\n"
-                + "Documents are picked one at a time and need no permission.\n"
-                + "You can change these later in Settings.",
+                + "Location — where you punched in and which places you visited\n\n"
+                + "Both are required. Please choose Allow, and Precise for "
+                + "location.\n\nAttaching photos or documents needs no permission.",
               "Continue", new View.OnClickListener() {
                   @Override public void onClick(View v) { requestThem(); }
               });
     }
 
     private void requestThem() {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ASKED, true).apply();
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) { checkThenLoad(); return; }
-
-        List<String> want = new ArrayList<String>();
-        want.add(Manifest.permission.CAMERA);
-        want.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        want.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        if (Build.VERSION.SDK_INT >= 33) {
-            want.add(Manifest.permission.READ_MEDIA_IMAGES);
-            want.add(Manifest.permission.READ_MEDIA_VIDEO);
-            // Android 14 lets someone grant only the items they pick. Asking for
-            // it alongside the two above is what puts "Select photos" on the
-            // prompt; without it they only get all-or-nothing.
-            if (Build.VERSION.SDK_INT >= 34) {
-                want.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED);
-            }
-        } else {
-            want.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-        }
+        if (hasAll()) { gated = false; checkThenLoad(); return; }
 
         List<String> missing = new ArrayList<String>();
-        for (String p : want) {
+        for (String p : REQUIRED) {
             if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) missing.add(p);
         }
-        if (missing.isEmpty()) { checkThenLoad(); return; }
-
         say("Waiting for your answer…");
         requestPermissions(missing.toArray(new String[0]), REQ_PERMS);
     }
 
     @Override
     public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
-        if (req == REQ_PERMS) {
-            // Refusing is allowed. The screens that need a camera or GPS will say
-            // so when they are opened; the rest of the app works regardless.
-            checkThenLoad();
-            return;
+        if (req != REQ_PERMS) { super.onRequestPermissionsResult(req, perms, results); return; }
+
+        if (hasAll()) { gated = false; checkThenLoad(); return; }
+
+        // Android stops showing the prompt once someone has refused firmly. In
+        // that case the only way back is the phone's own settings screen.
+        boolean canAskAgain = false;
+        for (String p : REQUIRED) {
+            if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED
+                    && shouldShowRequestPermissionRationale(p)) canAskAgain = true;
         }
-        super.onRequestPermissionsResult(req, perms, results);
+
+        String missing = missingLabel();
+        if (canAskAgain) {
+            offer("Team2 cannot start without " + missing + ".\n\n"
+                    + "Attendance and visits are recorded with a photo and a "
+                    + "location — without them there is nothing to record.",
+                  "Allow", new View.OnClickListener() {
+                      @Override public void onClick(View v) { requestThem(); }
+                  });
+        } else {
+            offer("Team2 cannot start without " + missing + ".\n\n"
+                    + "Android will not ask again, so please switch it on in "
+                    + "Settings — Permissions, then come back.",
+                  "Open settings", new View.OnClickListener() {
+                      @Override public void onClick(View v) { openAppSettings(); }
+                  });
+        }
+    }
+
+    private String missingLabel() {
+        boolean cam = checkSelfPermission(Manifest.permission.CAMERA)
+                      != PackageManager.PERMISSION_GRANTED;
+        boolean loc = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                      != PackageManager.PERMISSION_GRANTED;
+        if (cam && loc) return "camera and location";
+        return cam ? "the camera" : "precise location";
+    }
+
+    private void openAppSettings() {
+        try {
+            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                  Uri.fromParts("package", getPackageName(), null));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Exception e) {
+            Toast.makeText(this, "Open Settings - Apps - Team2 - Permissions.",
+                           Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** Coming back from the settings screen with the permissions now granted. */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (gated && hasAll()) { gated = false; checkThenLoad(); }
     }
 
     // -------------------------------------------------- update check, then load

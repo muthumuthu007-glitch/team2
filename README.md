@@ -469,29 +469,35 @@ the chooser is left alone, so taking a selfie still works.
 A link to a document is handed to whatever app on the phone can open it, via a
 `DownloadListener` - a WebView ignores such links otherwise.
 
-### Permissions, and one that does not exist
+### Permissions - two, and both required
 
 | asked for | why |
 |---|---|
 | Camera | punch-in selfie, visit photos |
-| Location (fine + coarse) | where a punch or visit happened |
-| Photos and videos | attaching from the gallery |
+| Location (precise) | where a punch or visit happened |
 
-On Android 14 and up `READ_MEDIA_VISUAL_USER_SELECTED` is requested alongside
-the two media permissions. That is what puts **"Select photos"** on the prompt;
-without it the choice is all-or-nothing.
+**The app refuses to open until both are granted.** An attendance app whose
+punches carry no selfie and no coordinates records nothing anyone can rely on,
+so these are not optional. If someone refuses, the shell explains and offers
+`Allow` again; once Android stops asking (a firm refusal) it offers **Open
+settings** instead and resumes by itself when they come back with the
+permissions on.
 
-**Documents need no permission at all.** PDFs, Excel, Word and the rest come
-through the system document picker, which grants access to the one file that was
-chosen. That is why there is no storage permission here beyond Android 12.
+Android has no way to demand permissions at install time - every runtime
+permission can be refused - so refusing to run is the strongest the platform
+allows.
+
+**There is no gallery or storage permission.** Attachments go through Android's
+own picker, which hands the app the single file the user chose. Asking for
+`READ_MEDIA_IMAGES` on top only added the **"Allow limited access"** prompt and
+bought nothing, because the app never searches the gallery itself. Removing it
+removed that prompt.
 
 **And there is no "save to phone" permission to ask for.** Android has not worked
 that way since version 10 - an app can always write its own private storage, and
-that is where the WebView keeps GPS readings until they can be sent. Asking for
-`WRITE_EXTERNAL_STORAGE` would be ignored on every modern phone, so it is not in
-the manifest.
+that is where the WebView keeps GPS readings until they can be sent.
 
-Background location is also **not** requested. Continuous tracking with the
+Background location is **not** requested either. Continuous tracking with the
 screen off needs `ACCESS_BACKGROUND_LOCATION`, a separate second prompt and a
 written justification to Google Play. That belongs with the Live Tracking menu,
 not here.

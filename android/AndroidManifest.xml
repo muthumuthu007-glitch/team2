@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="in.carloo.team2"
-    android:versionCode="2"
-    android:versionName="1.1.0">
+    android:versionCode="3"
+    android:versionName="1.2.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36" />
 
@@ -16,19 +16,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Attaching from the gallery. READ_EXTERNAL_STORAGE is only used up to
-         Android 12; from 13 the per-media permissions replace it, and from 14
-         the user may grant only the items they pick.
-
-         Documents (PDF, Excel, Word, anything else) need NO permission: they
-         come through the system document picker, which grants access to the one
-         file that was chosen. Saving the app's own data — including GPS held
-         until it can be sent — needs no permission either. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- No gallery or storage permission on purpose.
+         Attachments go through Android's own picker, which hands this app the
+         single file the user chose and nothing else. Asking for READ_MEDIA_*
+         on top of that only adds the "Allow limited access" prompt and buys
+         nothing, because the app never searches the gallery itself.
+         Saving the app's own data — including GPS held until it can be sent —
+         needs no permission either; it goes to private app storage. -->
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
