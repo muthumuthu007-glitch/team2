@@ -12,7 +12,7 @@ After=network-online.target
 Type=oneshot
 User=$USER
 WorkingDirectory=$HOME/team2-src
-ExecStart=/bin/bash -c 'git fetch --quiet origin main && [ "\$(git rev-parse HEAD)" != "\$(git rev-parse origin/main)" ] && exec $HOME/team2-src/deploy.sh || echo "already current"'
+ExecStart=/bin/bash -c 'git fetch --quiet origin main; if [ "\$(git rev-parse HEAD)" != "\$(git rev-parse origin/main)" ]; then exec $HOME/team2-src/deploy.sh; else echo "already current"; fi'
 UNIT
 
 sudo tee /etc/systemd/system/team2-deploy.timer >/dev/null <<'UNIT'
