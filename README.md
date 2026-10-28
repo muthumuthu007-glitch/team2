@@ -425,6 +425,79 @@ From anywhere, to see which commit is live:
 
     curl -s https://team2.carloo.in/ | grep -o 'version: "[^"]*"'
 
+## The phone app
+
+`android/` builds **Team2.apk**. It is a shell, not a copy of the app: it opens
+`https://team2.carloo.in` in a WebView, and the server sends the page with
+`Cache-Control: no-store`. So **pushing to GitHub updates every phone** — nobody
+reinstalls anything. You only rebuild the APK when the shell itself changes:
+permissions, splash, icon, package name.
+
+This is deliberately *not* how Mono works. Mono downloads an HTML file from
+storage and renders it at a borrowed origin, which welds its APK to that origin
+forever and is why Mono cannot leave Supabase without a new APK on every phone.
+We own team2.carloo.in, so the shell just loads it.
+
+### What happens on launch
+
+1. **First run only** — a screen explaining what the app needs and why, then
+   Android's own permission prompts: camera, location, photos.
+2. **Every run** — "Checking for updates...", which reads the top of the page
+   from the server and shows the build it is about to open
+   (`Loading Team2 2.1.0+abc1234...`). The update is therefore finished *before*
+   the login page appears.
+3. The login page, then the app.
+
+No internet means no launch — there is no offline copy, because the page is
+served `no-store`. The shell shows "Could not reach team2.carloo.in" with a
+retry button. An offline shell would need a service worker; not built yet.
+
+### Staff only
+
+The shell appends `Team2App/<version>` to the user agent. `index.html` reads
+that and **removes the Admin tab** from the login page, so the phone app signs
+in as Team or Visitor only. Administration stays on a desktop browser.
+
+### Permissions, and one that does not exist
+
+| asked for | why |
+|---|---|
+| Camera | punch-in selfie, visit photos |
+| Location (fine + coarse) | where a punch or visit happened |
+| Photos / media | attaching a picture from the gallery |
+
+**There is no "save to phone" permission to ask for.** Android has not worked
+that way since version 10 - an app can always write its own private storage, and
+that is where the WebView keeps GPS readings until they can be sent. Asking for
+`WRITE_EXTERNAL_STORAGE` would be ignored on every modern phone, so it is not in
+the manifest.
+
+Background location is also **not** requested. Continuous tracking with the
+screen off needs `ACCESS_BACKGROUND_LOCATION`, a separate second prompt and a
+written justification to Google Play. That belongs with the Live Tracking menu,
+not here.
+
+### Building
+
+    powershell -ExecutionPolicy Bypass -File androiduild.ps1
+
+Uses the newest build-tools and platform in the SDK, and Android Studio's bundled
+JDK. No Gradle, same as Mono.
+
+**`android/team2-release.keystore` is the only way to ever update an installed
+copy.** Android refuses an update signed by a different key. It and
+`android/.keystore-pass` are git-ignored - back both up somewhere off this
+laptop. Losing them means every phone has to uninstall and start again.
+
+### Icon
+
+The Carloo wordmark is too wide to read at icon size, so the launcher icon is
+the interlocking **oo** monogram in Carloo black on white
+(`res/drawable/ic_team2_fg.xml`, drawn as a vector so it is sharp at any size).
+The full wordmark appears on the splash screen.
+
+---
+
 ## Known gaps
 
 - **No photo storage.** `attendance_punches.selfie_url` and `visit_photos.url`

@@ -4,3 +4,11 @@
 _*
 *.xlsx
 *.xls
+# Android build output and the signing key.
+# The keystore is the ONLY way to update an installed Team2 app — back it up
+# off this laptop, but do not commit it.
+android/build/
+android/*.keystore
+android/.keystore-pass
+android/*.apk
+android/*.idsig
